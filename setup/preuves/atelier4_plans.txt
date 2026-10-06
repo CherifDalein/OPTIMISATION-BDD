@@ -1,0 +1,96 @@
+INDEX PARTIEL — filtre correspondant
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id
+FROM shopflow.commandes
+WHERE statut = 'en_attente'
+ORDER BY created_at, id
+LIMIT 100;
+
+Limit  (cost=0.29..3.44 rows=100 width=16) (actual time=0.167..0.200 rows=100.00 loops=1)
+  Buffers: shared hit=1 read=2
+  ->  Index Only Scan using idx_atelier4_attente on commandes  (cost=0.29..312.64 rows=9890 width=16) (actual time=0.166..0.180 rows=100.00 loops=1)
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=1 read=2
+Planning:
+  Buffers: shared hit=42 read=8
+Planning Time: 6.821 ms
+Execution Time: 0.280 ms
+
+
+INDEX PARTIEL — filtre non correspondant
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id
+FROM shopflow.commandes
+WHERE statut = 'payee'
+ORDER BY created_at, id
+LIMIT 100;
+
+Limit  (cost=5208.25..5219.64 rows=100 width=16) (actual time=42.066..46.405 rows=100.00 loops=1)
+  Buffers: shared hit=1720
+  ->  Gather Merge  (cost=5208.25..14327.83 rows=80017 width=16) (actual time=42.062..46.392 rows=100.00 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=1720
+        ->  Sort  (cost=4208.24..4325.91 rows=47069 width=16) (actual time=34.575..34.582 rows=73.00 loops=2)
+              Sort Key: created_at, id
+              Sort Method: top-N heapsort  Memory: 31kB
+              Buffers: shared hit=1720
+              Worker 0:  Sort Method: top-N heapsort  Memory: 31kB
+              ->  Parallel Seq Scan on commandes  (cost=0.00..2409.29 rows=47069 width=16) (actual time=7.924..28.175 rows=40000.00 loops=2)
+                    Filter: (statut = 'payee'::text)
+                    Rows Removed by Filter: 10000
+                    Buffers: shared hit=1674
+Planning Time: 1.725 ms
+Execution Time: 46.722 ms
+
+
+GIN — contenance JSONB compatible
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, nom
+FROM shopflow.produits
+WHERE attributs @> '{"categorie":"livre"}'::jsonb;
+
+Seq Scan on produits  (cost=0.00..5.50 rows=50 width=19) (actual time=0.048..0.105 rows=50.00 loops=1)
+  Filter: (attributs @> '{"categorie": "livre"}'::jsonb)
+  Rows Removed by Filter: 150
+  Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=36 read=3 dirtied=1
+Planning Time: 3.155 ms
+Execution Time: 0.199 ms
+
+
+GIN — extraction de propriété
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, nom
+FROM shopflow.produits
+WHERE attributs ->> 'categorie' = 'livre';
+
+Seq Scan on produits  (cost=0.00..6.00 rows=1 width=19) (actual time=0.070..0.114 rows=50.00 loops=1)
+  Filter: ((attributs ->> 'categorie'::text) = 'livre'::text)
+  Rows Removed by Filter: 150
+  Buffers: shared hit=3
+Planning Time: 0.343 ms
+Execution Time: 0.207 ms
+
+
+GIST — chevauchement
+
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, periode
+FROM shopflow.atelier4_reservations
+WHERE periode && tstzrange(
+  '2026-10-10 14:00+02', '2026-10-10 16:00+02', '[)'
+);
+
+Seq Scan on atelier4_reservations  (cost=0.00..1.04 rows=1 width=40) (actual time=0.134..0.140 rows=2.00 loops=1)
+  Filter: (periode && '["2026-10-10 12:00:00+00","2026-10-10 14:00:00+00")'::tstzrange)
+  Rows Removed by Filter: 1
+  Buffers: shared hit=1
+Planning Time: 0.448 ms
+Execution Time: 0.180 ms

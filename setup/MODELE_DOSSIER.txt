@@ -1,0 +1,32 @@
+# Dossier de preuves — ShopFlow
+
+Auteur / groupe : \[à compléter]. Date : \[à compléter]. Contribution individuelle : \[à compléter].
+
+## Besoin et état initial
+
+Endpoint / question métier, volume, granularité de résultat, champs et droits : \[à compléter]. Symptôme et trace initiale : \[fichier à joindre].
+
+## Environnement reproductible
+
+Versions PostgreSQL, Node, Redis ; machine CPU/RAM ; index présents ; réglages modifiés ; pool ; données ; autres charges ; cache chaud/froid : \[à compléter].
+
+## Changement et code
+
+Hypothèse ; SQL ou fonction avant/après ; mécanisme ; coût attendu sur lecture/écriture : \[à compléter avec références de fichiers].
+
+## Exactitude et fiabilité
+
+Test de contenu ; granularité ; droits ; résultats observés ; test concurrent ou fraîcheur ; trace et chronologie : \[à compléter].
+
+## Mesures réelles
+
+Scénario identique ; charge fermée ; durée ; échauffement ; cinq répétitions ; CSV et méta : \[à joindre]. Pour chaque état et charge, indiquer p50, p95, débit, erreurs et dispersion. Ne pas remplir avec les valeurs illustratives du cours. Joindre le graphique produit à partir de vos observations.
+
+## Décision et limites
+
+Variante retenue, variante rejetée et preuve ; coût d’écriture/stockage ; risque restant ; conditions où la décision ne s’applique plus ; prochaine expérience : \[à compléter].
+
+## Soutenance de cinq minutes
+
+Problème → mécanisme → mesures → exactitude/fiabilité → décision/limite. Préparer la reproduction et les conséquences pour l’API.
+

@@ -1,0 +1,11 @@
+etat,client_id,operation,n,moyenne_ms,p50_ms,p95_empirique_ms,min_ms,max_ms,ecart_type_population_ms
+initial,42,lecture,5,1.177,1.061,1.834,0.928,1.834,0.335
+initial,1,lecture,5,1.803,1.656,2.336,1.211,2.336,0.401
+initial,999,lecture,5,1.611,1.571,2.264,1.22,2.264,0.368
+initial,1/42/999,insertion_1000,5,26.868,20.052,53.759,14.727,53.759,14.102
+simple,42,lecture,5,2.032,1.989,2.907,1.323,2.907,0.588
+simple,1,lecture,5,1.819,1.785,2.05,1.492,2.05,0.207
+simple,999,lecture,5,1.637,1.707,1.886,1.155,1.886,0.252
+simple,1/42/999,insertion_1000,5,22.372,22.712,26.996,17.117,26.996,3.67
+compose,42,lecture,5,0.479,0.496,0.684,0.227,0.684,0.152
+couvrant,42,lecture,5,0.294,0.234,0.406,0.225,0.406,0.08

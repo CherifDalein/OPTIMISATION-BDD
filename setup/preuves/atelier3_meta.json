@@ -1,0 +1,27 @@
+{
+  "source": "plans pgAdmin transmis",
+  "repetitions": 5,
+  "echauffements": "exclus",
+  "p95": "rang ceil(0.95*n), maximum pour n=5",
+  "lectures": {
+    "initial": [
+      1,
+      42,
+      999
+    ],
+    "simple": [
+      1,
+      42,
+      999
+    ],
+    "compose": [
+      42
+    ],
+    "couvrant": [
+      42
+    ]
+  },
+  "insertions": "1000 commandes, BEGIN/ROLLBACK ; initial et simple seulement",
+  "doublon": "premier plan insertion simple transmis deux fois, compté une seule fois",
+  "limites": "séries non intercalées, effets physiques du rollback, max(id) variable"
+}

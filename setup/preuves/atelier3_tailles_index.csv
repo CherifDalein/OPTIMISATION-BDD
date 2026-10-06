@@ -1,0 +1,12 @@
+etat,index,taille_octets,taille_lisible
+initial,commandes_client_id_cle_idempotence_key,1908736,1864 kB
+initial,commandes_pkey,4513792,4408 kB
+simple,commandes_client_id_cle_idempotence_key,2015232,1968 kB
+simple,commandes_pkey,4554752,4448 kB
+simple,idx_atelier3_client_simple,704512,688 kB
+compose,commandes_client_id_cle_idempotence_key,2113536,2064 kB
+compose,commandes_pkey,4579328,4472 kB
+compose,idx_atelier3_hist_compose,4079616,3984 kB
+couvrant,commandes_client_id_cle_idempotence_key,2113536,2064 kB
+couvrant,commandes_pkey,4579328,4472 kB
+couvrant,idx_atelier3_hist_couvrant,5931008,5792 kB

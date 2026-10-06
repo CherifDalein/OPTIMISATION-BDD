@@ -1,0 +1,6 @@
+scenario,plan,lignes,execution_time_ms,shared_hit,shared_read
+partiel_en_attente,Index Only Scan,100,0.28,1,2
+partiel_payee,Parallel Seq Scan + Sort + Gather Merge,100,46.722,1720,0
+gin_contenance,Seq Scan,50,0.199,3,0
+gin_extraction,Seq Scan,50,0.207,3,0
+gist_chevauchement,Seq Scan,2,0.18,1,0

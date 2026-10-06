@@ -1,0 +1,7 @@
+atelier,variante,n,moyenne_ms,p50_ms,p95_empirique_ms,min_ms,max_ms,ecart_type_population_ms
+atelier1,historique_client42,5,1.695,1.737,2.474,0.827,2.474,0.527
+atelier1,agregation_statut,5,49.656,48.577,61.019,41.124,61.019,7.444
+atelier2,join_distinct,5,0.445,0.366,0.862,0.245,0.862,0.22
+atelier2,exists,5,0.371,0.384,0.498,0.219,0.498,0.103
+atelier2,agregation_apres_jointure,5,0.732,0.609,1.296,0.448,1.296,0.317
+atelier2,preagregation,5,0.622,0.575,1.228,0.293,1.228,0.321

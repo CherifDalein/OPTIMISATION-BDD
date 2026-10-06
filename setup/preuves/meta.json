@@ -1,0 +1,18 @@
+{
+  "source": "Plans EXPLAIN (ANALYZE, BUFFERS) transmis par l’étudiant depuis pgAdmin",
+  "postgresql": "18.6 Debian aarch64 64-bit",
+  "unite": "ms",
+  "metrique": "Execution Time, hors Planning Time",
+  "echauffement": "une execution par variante, exclue des statistiques",
+  "repetitions": {
+    "atelier1": 5,
+    "atelier2": 5
+  },
+  "p95": "rang le plus proche : valeur de rang ceil(0.95*n), donc maximum pour n=3 ou n=5 ; estimation de queue peu fiable",
+  "charge": "executions manuelles sequentielles ; aucun test API sous charge",
+  "horodatages": "non disponibles",
+  "cache": "shared hit uniquement dans les plans transmis ; cache non vide force",
+  "droits": "role cours configure dans Compose ; droits effectifs non audites",
+  "statistiques": "cinq mesures par variante, échauffements exclus",
+  "collecte_atelier2": "mesures 4 et 5 recueillies dans une seconde série ; continuité de session et charge non documentées"
+}

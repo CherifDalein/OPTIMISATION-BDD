@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: cours
+      POSTGRES_PASSWORD: cours-local
+      POSTGRES_DB: shopflow
+    ports:
+      - "127.0.0.1:55432:5432"
+    # PostgreSQL 18 utilise son répertoire versionné sous /var/lib/postgresql.
+    volumes:
+      - shopflow_pg18:/var/lib/postgresql
+      - ../../02_Laboratoire/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ../../02_Laboratoire/02_donnees.sql:/docker-entrypoint-initdb.d/02_donnees.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cours -d shopflow"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:8
+    ports:
+      - "127.0.0.1:56379:6379"
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+  pgadmin:
+    image: dpage/pgadmin4:9.18
+    environment:
+      PGADMIN_DEFAULT_EMAIL: etudiant@example.com
+      PGADMIN_DEFAULT_PASSWORD: pgadmin-local
+      PGADMIN_DISABLE_POSTFIX: "1"
+    ports:
+      - "127.0.0.1:5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - shopflow_pgadmin:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+volumes:
+  shopflow_pg18:
+  shopflow_pgadmin:
