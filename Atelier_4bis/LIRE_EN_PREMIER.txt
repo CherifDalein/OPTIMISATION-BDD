@@ -1,0 +1,63 @@
+# Atelier 4 bis : migration de schéma compatible
+
+Durée : **60 minutes**, puis 30 minutes de bilan dans le créneau « Migration et bilan » de J2. Slides **33 à 42** du support enrichi.
+
+ShopFlow ajoute `newsletter_ok` à ses clients. Règle métier de l'exercice : l'absence d'autorisation donne `false`. Vous réaliserez la migration, vérifierez la compatibilité des lectures et des écritures, puis exécuterez un retour arrière sur la copie.
+
+## Préparation
+
+Utiliser PostgreSQL 18 et la base de laboratoire ShopFlow déjà initialisée avec `01_schema.sql` et `02_donnees.sql`. Le jeu initial comprend **1 000 clients**, identifiants 1 à 1000. Les identifiants 1001 et 1002 servent aux tests temporaires. S'ils existent dans un jeu modifié, choisir des identifiants libres et adapter les tests.
+
+Les scripts créent `shopflow.clients_migration_tp` et `shopflow.clients_migration_reference_tp`. Ils conservent la table `shopflow.clients`. Ouvrir le client SQL avec **autocommit activé**. Dans pgAdmin, vérifier ce réglage dans chaque Query Tool. Les fichiers précisent les blocs à sélectionner : **ne pas lancer tous les fichiers d'un coup**.
+
+La compatibilité applicative se simule par SQL. L'exercice ne demande pas de modifier ou de déployer l'API.
+
+## Déroulement et résultats attendus
+
+| Étape | Action dans le client SQL | Résultat attendu avec le jeu initial |
+|---|---|---|
+| 01 | Exécuter `01_preparation.sql` une fois | Copie et référence créées, 1000 clients |
+| 02 | Exécuter séparément les commandes de `02_ajout_colonne.sql` | Colonne nullable, 1000 NULL |
+| 03 | Exécuter les tests de `03_compatibilite.sql` | Ancien lecteur conservé, nouveau lecteur gérant NULL, anciennes/nouvelles insertions possibles, tests annulés |
+| 03, fin | Fixer le défaut `false`, recompter les NULL | Toujours 1000 NULL dans les lignes existantes |
+| 04 | Sélectionner le bloc WITH de `04_remplissage_lot.sql`, le répéter | 200, 200, 200, 200, 200, puis 0 lignes modifiées |
+| 04, suivi | Exécuter la requête de suivi entre les lots | 800, 600, 400, 200, puis 0 NULL |
+| 05 | Après le contrôle à 0 NULL, exécuter `05_contrainte_progressive.sql` | CHECK présent, `convalidated=false` |
+| 06 | Exécuter séparément les commandes de `06_validation.sql` | CHECK validé, colonne NOT NULL, défaut false |
+| 07 | Sélectionner chaque bloc de `07_controles.sql` séparément | Défaut false, erreur 23502 pour NULL, 1000 clients, 0 NULL, 0 écart historique |
+| 08 | Intercaler les étapes des fichiers A et B selon les indications ci-dessous | Délai de verrou dépassé, puis réussite après COMMIT dans A |
+| 09 | Après capture des preuves, exécuter le retour arrière | Colonne retirée, champs historiques identiques à la référence |
+
+Un `SET DEFAULT` ne remplit pas les anciennes lignes. Le `CHECK NOT VALID` s'applique déjà aux nouvelles écritures, même avant validation des anciennes lignes. Un CHECK valide prouvant l'absence de NULL permet à `SET NOT NULL` d'éviter un second scan si on conserve ce CHECK pendant la commande. Cette commande demande encore un verrou fort. [Documentation PostgreSQL 18](https://www.postgresql.org/docs/18/sql-altertable.html).
+
+Chaque lot doit se terminer avant le suivant. Ne pas placer toutes les répétitions de 04 dans une seule transaction. Relancer le lot après un résultat à 0 doit encore produire 0. Les valeurs explicites déjà renseignées restent intactes.
+
+Si une commande inattendue échoue, conserver l'erreur et arrêter cette étape. Ne pas passer à l'étape suivante avant d'avoir compris et corrigé la cause. Dans une transaction en erreur, exécuter `ROLLBACK` avant de reprendre.
+
+## Test de verrou : ordre exact des deux connexions
+
+1. Ouvrir **deux connexions indépendantes** à la même base. Deux onglets partageant une connexion ne suffisent pas.
+2. Dans A : sélectionner `BEGIN` et `SELECT` du fichier `08_verrous_session_A.sql`. Garder la transaction ouverte.
+3. Dans B, en autocommit : exécuter `SET lock_timeout='2s'`, puis sélectionner le premier `ALTER TABLE` du fichier B.
+4. Conserver l'erreur **55P03** et la durée observée, proche de deux secondes. A détient le verrou de lecture jusqu'au COMMIT. B attend le verrou de modification du schéma.
+5. Dans A : exécuter `COMMIT`.
+6. Dans B : relancer **le même ALTER TABLE**. Conserver sa réussite. Si B était dans une transaction explicite lors de l'erreur, exécuter `ROLLBACK` avant cette reprise.
+7. Dans B : supprimer uniquement la colonne `test_verrou`, puis réinitialiser `lock_timeout` comme indiqué dans le fichier B.
+
+`lock_timeout` limite chaque attente de verrou et ne constitue pas une limite de durée totale d'exécution. [Réglages PostgreSQL](https://www.postgresql.org/docs/18/runtime-config-client.html), [verrous explicites](https://www.postgresql.org/docs/18/explicit-locking.html).
+
+Sans serveur permettant deux connexions, remettre une chronologie argumentée de ce scénario et marquer **« analyse non exécutée »**. Cette analyse ne remplace pas une trace de test réel.
+
+## Retour arrière
+
+Arrêter les requêtes utilisant `newsletter_ok`, puis suivre `09_retour_arriere.sql`. Le premier bloc retire les contraintes et le défaut tout en gardant la colonne. Le dernier ALTER retire la colonne de la copie et détruit ses valeurs. Cette suppression termine le laboratoire après capture des preuves. En production, la procédure doit prévoir le retour applicatif et la conservation éventuelle de ces nouvelles valeurs.
+
+Le retour de structure ne reconstitue pas les valeurs supprimées. Les contrôles vérifient ici les champs historiques `id`, `email` et `nom`, dans les deux sens avec `EXCEPT ALL`. Un comptage identique seul ne prouve pas que les valeurs sont identiques.
+
+Pour rejouer l'exercice après le retour arrière, reprendre à **02** sur la copie conservée. Ne pas relancer 01, qui signale qu'une table existe déjà.
+
+## Dossier à remettre
+
+Conserver les fichiers SQL exécutés, la version et le volume, les résultats de contrôle, le nombre et la durée de chaque lot, les états de contrainte, les tests de compatibilité, la chronologie A/B et le retour arrière. Rédiger une conclusion courte sur les points de compatibilité et les limites du laboratoire.
+
+Les **ateliers 3 et 4** apportent le besoin applicatif, le SQL de lecture, le DDL d'indexation, les plans avant/après et le coût d'écriture. L'**atelier 4 bis** apporte le DDL d'évolution de schéma, le remplissage, la validation, les traces de verrou et le retour arrière. L'ajout de cette colonne ne démontre pas un gain de performance.

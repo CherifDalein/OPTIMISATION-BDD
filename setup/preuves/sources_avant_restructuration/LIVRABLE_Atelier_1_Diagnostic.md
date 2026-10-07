@@ -1,19 +1,39 @@
-# Atelier 1 — Diagnostic initial
+# Atelier 1 — Diagnostic initial de ShopFlow
 
-## 1. Tester l’état initial
+Date : 5 octobre 2026
 
-Base `shopflow`, PostgreSQL **18.6 Debian, aarch64, 64 bits**. Volumes vérifiés : **1 000 clients, 200 produits, 100 000 commandes, 300 000 lignes**.
+## 1. Contexte et version
 
-```sql
-SELECT version();
-SELECT
- (SELECT count(*) FROM shopflow.clients) AS clients,
- (SELECT count(*) FROM shopflow.produits) AS produits,
- (SELECT count(*) FROM shopflow.commandes) AS commandes,
- (SELECT count(*) FROM shopflow.lignes) AS lignes;
+Base de laboratoire : `shopflow`, schéma `shopflow`. Consultation depuis pgAdmin dans l’environnement Docker décrit dans `PREPARATION.md`. Le diagnostic doit être réalisé sans ajouter d’index. Version communiquée, obtenue avec `SELECT version();` :
+
+```text
+PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
 ```
 
-**Historique du client 42 :**
+Contrôle du chargement des données :
+
+```sql
+SELECT
+  (SELECT count(*) FROM shopflow.clients) AS clients,
+  (SELECT count(*) FROM shopflow.produits) AS produits,
+  (SELECT count(*) FROM shopflow.commandes) AS commandes,
+  (SELECT count(*) FROM shopflow.lignes) AS lignes;
+```
+
+| Table | Effectif attendu selon le script | Effectif observé |
+|---|---:|---|
+| clients | 1 000 | 1 000 |
+| produits | 200 | 200 |
+| commandes | 100 000 | 100 000 |
+| lignes | 300 000 | 300 000 |
+
+Les effectifs observés correspondent aux effectifs attendus du jeu de données initial.
+
+## 2. Requêtes et résultats fonctionnels
+
+Les deux requêtes suivantes sont proposées pour répondre à la consigne de l’atelier ; aucun script de diagnostic dédié n’a été trouvé dans le dossier fourni.
+
+### Requête 1 — Historique du client 42
 
 ```sql
 SELECT id, created_at, statut, total
@@ -22,64 +42,78 @@ WHERE client_id = 42
 ORDER BY created_at DESC, id DESC;
 ```
 
-```sql
-SELECT count(*) AS nombre_commandes, sum(total) AS montant_total
-FROM shopflow.commandes WHERE client_id = 42;
-```
-
-Résultat : **100 commandes ; 47 760,00**.
-
-**Agrégation par statut :**
+Contrôle fonctionnel :
 
 ```sql
-SELECT statut, count(*) AS nombre_commandes, sum(total) AS montant_total
+SELECT count(*) AS nombre_commandes,
+       sum(total) AS montant_total
 FROM shopflow.commandes
-GROUP BY statut ORDER BY statut;
+WHERE client_id = 42;
 ```
 
-| Statut | Commandes | Montant |
-|---|---:|---:|
-| annulee | 10 000 | 3 049 912,50 |
-| en_attente | 10 000 | 2 974 962,50 |
-| payee | 80 000 | 23 750 126,25 |
+Nombre de commandes observé par le contrôle fonctionnel : **100**, conforme à l’effectif attendu selon les données initiales. Montant total observé : **47 760,00**.
+
+### Requête 2 — Agrégation des commandes par statut
 
 ```sql
-SELECT sum(total) FROM shopflow.commandes;
+SELECT statut,
+       count(*) AS nombre_commandes,
+       sum(total) AS montant_total
+FROM shopflow.commandes
+GROUP BY statut
+ORDER BY statut;
 ```
 
-Contrôle : **29 775 001,25**, égal à la somme des trois groupes.
+| Statut | Nombre attendu | Nombre observé | Montant total observé |
+|---|---:|---|---|
+| annulee | 10 000 | 10 000 | 3 049 912,50 |
+| en_attente | 10 000 | 10 000 | 2 974 962,50 |
+| payee | 80 000 | 80 000 | 23 750 126,25 |
 
-## 2. Mesurer
+Nombre de lignes retournées : **3**, conforme au résultat attendu. Les effectifs par statut sont conformes et représentent au total **100 000 commandes**. Somme des trois montants communiqués : **29 775 001,25**. Contrôle du montant global :
 
-Méthode : contrôle du résultat, une exécution d’échauffement puis cinq répétitions du même SQL avec `EXPLAIN (ANALYZE, BUFFERS)`. Durée retenue : `Execution Time` (hors `Planning Time`). Échauffement exclu des statistiques.
+```sql
+SELECT sum(total) AS montant_global
+FROM shopflow.commandes;
+```
 
-Préfixer chacune des deux requêtes de lecture par :
+Montant global observé : **29 775 001,25**. Il est égal à la somme des trois montants par statut : **contrôle validé**.
+
+## 3. Mesures après échauffement
+
+Protocole suivi : chaque requête a été exécutée avec `EXPLAIN (ANALYZE, BUFFERS)` une fois pour l’échauffement, puis cinq fois pour les mesures. Les valeurs `Execution Time` ont été relevées en millisecondes et les plans complets conservés en annexe. L’échauffement est exclu des cinq mesures.
+
+| Requête | Mesure 1 (ms) | Mesure 2 (ms) | Mesure 3 (ms) | Mesure 4 (ms) | Mesure 5 (ms) |
+|---|---|---|---|---|---|
+| Historique du client 42 | 0,827 | 1,737 | 2,474 | 1,829 | 1,607 |
+| Agrégation par statut | 42,761 | 41,124 | 61,019 | 48,577 | 54,799 |
+
+| Requête | Moyenne (ms) | Médiane (ms) | Minimum (ms) | Maximum (ms) |
+|---|---:|---:|---:|---:|
+| Historique du client 42 | 1,695 | 1,737 | 0,827 | 2,474 |
+| Agrégation par statut | 49,656 | 48,577 | 41,124 | 61,019 |
+
+Échauffement de la requête 1 effectué : `Execution Time = 1.466 ms`, exclu des cinq mesures. Le plan indique `shared hit=90` au nœud racine, sans lecture `shared read` rapportée. Échauffement de la requête 2 effectué : `Execution Time = 54.149 ms`, également exclu des cinq mesures ; le plan indique `shared hit=1674` au nœud racine.
+
+## 4. Nœud coûteux et hypothèse
+
+Le nœud coûteux retenu est **`HashAggregate` de la requête 2**, alimenté par un `Seq Scan` de toutes les commandes. À la cinquième mesure, il termine à **54,463 ms**, contre **18,073 ms** pour son enfant, avec une seule boucle. La différence d’environ **36,390 ms** estime le temps propre à l’agrégation, sous réserve de l’instrumentation. Les temps des parents incluent ceux des enfants : ils ne doivent pas être additionnés.
+
+**Hypothèse expliquant le coût :** l’agrégation traite les **100 000 commandes** pour déterminer le groupe de chaque ligne, incrémenter le compteur et additionner les montants de type `numeric`. Les trois groupes nécessitent peu de mémoire, mais toutes les lignes restent à traiter. Les cinq plans rapportent **1 674 accès aux blocs en cache** (`shared hit=1674`), sans `shared read` rapporté. L’agrégation tient en mémoire (**32 kB**, `Batches: 1`) et le tri final de trois lignes utilise **25 kB**. Aucun débordement sur disque n’est rapporté. Ces observations sont compatibles avec un coût de calcul et de parcours en mémoire. Les estimations de lignes correspondent aux observations : 100 000 pour le parcours et 3 pour l’agrégation. Pour la requête 1, l’index initial créé par `UNIQUE (client_id, cle_idempotence)` permet de retrouver 100 commandes sans parcourir toute la table. Le `Bitmap Heap Scan` et son enfant constituent la principale partie du temps avant le tri. Les lignes sont réparties sur **88 blocs de table distincts** ; cette dispersion explique le travail de récupération malgré le faible nombre de résultats. Les plans indiquent **90 accès aux blocs en cache**, dont 2 pour l’index, et un tri en mémoire de **29 kB**. Les structures de plans et les buffers restent stables malgré la variation des durées. Une variation de charge ou d’ordonnancement de l’environnement est une hypothèse possible, non vérifiée par ces seuls plans. Les résultats constituent une référence initiale sur cet environnement et ce jeu de données, sans ajout d’index lors de cet atelier.
+
+## Annexe — Plans complets et informations BUFFERS
+
+### Commande de mesure de la requête 1
 
 ```sql
 EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 42
+ORDER BY created_at DESC, id DESC;
 ```
 
-| État / requête | 1 (ms) | 2 | 3 | 4 | 5 | Moyenne | p50 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Historique client 42 | 0,827 | 1,737 | 2,474 | 1,829 | 1,607 | 1,695 | 1,737 |
-| Agrégation par statut | 42,761 | 41,124 | 61,019 | 48,577 | 54,799 | 49,656 | 48,577 |
-
-## 3. Expliquer le coût observé
-
-| Requête | Preuve du plan | Explication |
-|---|---|---|
-| Historique | Bitmap Index Scan + Bitmap Heap Scan ; 100 lignes, 88 blocs table ; hit=90 ; tri 29 kB | L’index unique initial sur `(client_id, cle_idempotence)` filtre le client ; les lignes doivent être récupérées puis triées. |
-| Par statut | Seq Scan de 100 000 lignes + HashAggregate ; 3 groupes ; hit=1674 ; agrégation 32 kB | Chaque commande contribue à un compte et une somme, même si le résultat n’a que trois lignes. |
-
-À la cinquième mesure, `HashAggregate` termine à **54,463 ms**, son enfant à **18,073 ms** : environ **36,390 ms** de travail propre à l’agrégation. Les temps et buffers parents incluent les enfants : ne pas les additionner.
-
-**Décision :** conserver ce diagnostic comme référence initiale. Cet atelier mesure l’état existant, sans changement de SQL ni ajout d’index.
-
-**Preuves :** voir l’annexe A1 du présent document.
-
-## Annexe A1 — Plans complets
-
-### A1-01 — Annexe — Plans complets et informations BUFFERS / Commande de mesure de la requête 1 / Échauffement — requête 1
+#### Échauffement — requête 1
 
 ```text
 Sort  (cost=330.50..330.75 rows=100 width=28) (actual time=1.298..1.314 rows=100.00 loops=1)
@@ -98,7 +132,9 @@ Planning Time: 0.811 ms
 Execution Time: 1.466 ms
 ```
 
-### A1-02 — Commande de mesure de la requête 1 / Échauffement — requête 1 / Mesure 1 — requête 1
+L’index `commandes_client_id_cle_idempotence_key` provient de la contrainte `UNIQUE (client_id, cle_idempotence)` du schéma initial. Son utilisation ne suppose pas l’ajout d’un index supplémentaire. Le plan retourne bien 100 lignes. Le parcours de la table utilise 88 blocs distincts.
+
+#### Mesure 1 — requête 1
 
 ```text
 Sort  (cost=330.50..330.75 rows=100 width=28) (actual time=0.714..0.724 rows=100.00 loops=1)
@@ -117,7 +153,7 @@ Planning Time: 0.451 ms
 Execution Time: 0.827 ms
 ```
 
-### A1-03 — Échauffement — requête 1 / Mesure 1 — requête 1 / Mesure 2 — requête 1
+#### Mesure 2 — requête 1
 
 ```text
 Sort  (cost=330.50..330.75 rows=100 width=28) (actual time=1.545..1.565 rows=100.00 loops=1)
@@ -136,7 +172,7 @@ Planning Time: 0.873 ms
 Execution Time: 1.737 ms
 ```
 
-### A1-04 — Mesure 1 — requête 1 / Mesure 2 — requête 1 / Mesure 3 — requête 1
+#### Mesure 3 — requête 1
 
 ```text
 Sort  (cost=330.50..330.75 rows=100 width=28) (actual time=2.056..2.073 rows=100.00 loops=1)
@@ -155,7 +191,7 @@ Planning Time: 0.672 ms
 Execution Time: 2.474 ms
 ```
 
-### A1-05 — Mesure 2 — requête 1 / Mesure 3 — requête 1 / Mesure 4 — requête 1
+#### Mesure 4 — requête 1
 
 ```text
 Sort  (cost=330.50..330.75 rows=100 width=28) (actual time=1.555..1.576 rows=100.00 loops=1)
@@ -174,7 +210,7 @@ Planning Time: 0.712 ms
 Execution Time: 1.829 ms
 ```
 
-### A1-06 — Mesure 3 — requête 1 / Mesure 4 — requête 1 / Mesure 5 — requête 1
+#### Mesure 5 — requête 1
 
 ```text
 Sort  (cost=330.50..330.75 rows=100 width=28) (actual time=1.409..1.420 rows=100.00 loops=1)
@@ -193,7 +229,21 @@ Planning Time: 0.999 ms
 Execution Time: 1.607 ms
 ```
 
-### A1-07 — Mesure 5 — requête 1 / Commande de mesure de la requête 2 / Échauffement — requête 2
+Synthèse des cinq mesures de la requête 1 : moyenne **1,695 ms**, médiane **1,737 ms**, minimum **0,827 ms**, maximum **2,474 ms**. Les cinq plans conservent la même structure, retournent 100 lignes et indiquent `shared hit=90` au nœud racine (dont 2 accès aux blocs de l’index), avec 88 blocs de table distincts et un tri en mémoire de 29 kB. Les compteurs des nœuds parents incluent ceux de leurs enfants et ne doivent pas être additionnés. La variation des temps ne s’accompagne d’aucun changement de plan ni de lectures `shared read` rapportées ; sa cause ne peut pas être établie à partir de ces seuls plans.
+
+### Commande de mesure de la requête 2
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT statut,
+       count(*) AS nombre_commandes,
+       sum(total) AS montant_total
+FROM shopflow.commandes
+GROUP BY statut
+ORDER BY statut;
+```
+
+#### Échauffement — requête 2
 
 ```text
 Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=53.866..53.876 rows=3.00 loops=1)
@@ -210,7 +260,9 @@ Planning Time: 0.629 ms
 Execution Time: 54.149 ms
 ```
 
-### A1-08 — Commande de mesure de la requête 2 / Échauffement — requête 2 / Mesure 1 — requête 2
+Le parcours séquentiel traite 100 000 lignes et l’agrégation produit 3 groupes. L’agrégation tient en mémoire (32 kB, une seule partition rapportée par `Batches: 1`) et le tri utilise 25 kB. Aucun accès `shared read` ni débordement sur disque n’est rapporté.
+
+#### Mesure 1 — requête 2
 
 ```text
 Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=42.345..42.354 rows=3.00 loops=1)
@@ -227,7 +279,7 @@ Planning Time: 0.854 ms
 Execution Time: 42.761 ms
 ```
 
-### A1-09 — Échauffement — requête 2 / Mesure 1 — requête 2 / Mesure 2 — requête 2
+#### Mesure 2 — requête 2
 
 ```text
 Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=40.996..41.003 rows=3.00 loops=1)
@@ -244,7 +296,7 @@ Planning Time: 0.273 ms
 Execution Time: 41.124 ms
 ```
 
-### A1-10 — Mesure 1 — requête 2 / Mesure 2 — requête 2 / Mesure 3 — requête 2
+#### Mesure 3 — requête 2
 
 ```text
 Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=60.901..60.901 rows=3.00 loops=1)
@@ -261,7 +313,7 @@ Planning Time: 0.286 ms
 Execution Time: 61.019 ms
 ```
 
-### A1-11 — Mesure 2 — requête 2 / Mesure 3 — requête 2 / Mesure 4 — requête 2
+#### Mesure 4 — requête 2
 
 ```text
 Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=48.313..48.319 rows=3.00 loops=1)
@@ -278,7 +330,7 @@ Planning Time: 1.056 ms
 Execution Time: 48.577 ms
 ```
 
-### A1-12 — Mesure 3 — requête 2 / Mesure 4 — requête 2 / Mesure 5 — requête 2
+#### Mesure 5 — requête 2
 
 ```text
 Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=54.550..54.561 rows=3.00 loops=1)
@@ -294,3 +346,5 @@ Sort  (cost=3424.06..3424.07 rows=3 width=46) (actual time=54.550..54.561 rows=3
 Planning Time: 0.815 ms
 Execution Time: 54.799 ms
 ```
+
+État du rapport : **finalisé**. Les contrôles fonctionnels, les cinq mesures de chaque requête, les deux plans d’échauffement et les dix plans de mesure ont été conservés.

@@ -1,8 +1,10 @@
-# Atelier 3 — Indexer l’historique client
+# Atelier 3 — L’historique client
 
-## 1. Tester l’état initial
+Source : diapositive 12 de `J02_Indexer_modeliser.pptx`, exemples des diapositives 7 à 10. Base `shopflow` ; version PostgreSQL à reconfirmer si l’environnement a changé.
 
-Requête identique dans les quatre états :
+## Besoin et protocole
+
+Comparer la base initiale, un index simple sur `client_id`, un index composé `(client_id, created_at DESC, id DESC)` et sa variante couvrante `INCLUDE (statut, total)`. Conserver les index des contraintes initiales ; tester un seul index expérimental à la fois. Contrôler l’inventaire avant toute suppression. Requête retenue, adaptée à l’exemple d’historique limité du cours :
 
 ```sql
 SELECT id, created_at, statut, total
@@ -12,121 +14,110 @@ ORDER BY created_at DESC, id DESC
 LIMIT 20;
 ```
 
-Index initiaux conservés : clé primaire sur `id`, unicité sur `(client_id, cle_idempotence)`. Chaque client testé possède **100 commandes**.
+Clients retenus : 1, 42 et 999. Leurs effectifs ont été contrôlés : chacun possède 100 commandes. Le jeu initial distribue uniformément les commandes ; ces clients ne représentent pas à eux seuls une distribution déséquilibrée. Pour chaque état et chaque client : contrôle de contenu, une exécution d’échauffement puis cinq mesures `EXPLAIN (ANALYZE, BUFFERS)`. Relever plans complets, buffers, `Heap Fetches`, tailles des index et statistiques de durées. Les mesures de l’atelier 1 sans LIMIT ne constituent pas la référence de cette nouvelle requête. Comparer également un même lot d’insertion dans une transaction de laboratoire terminée par `ROLLBACK`, pour chaque état, avec échauffement et cinq mesures. Le retour arrière préserve le contenu logique mais n’annule pas tous les effets physiques (WAL, cache, tuples morts) ; documenter le protocole et éviter de comparer une série d’écritures avant les lectures suivantes sans tenir compte de la visibilité.
 
-| Client | Total des 100 commandes | Résultat LIMIT 20 |
+## Environnement et exactitude
+
+Inventaire réel des index de `shopflow.commandes`, communiqué depuis pgAdmin :
+
+```sql
+CREATE UNIQUE INDEX commandes_client_id_cle_idempotence_key
+ON shopflow.commandes USING btree (client_id, cle_idempotence);
+
+CREATE UNIQUE INDEX commandes_pkey
+ON shopflow.commandes USING btree (id);
+```
+
+Ces deux index correspondent aux contraintes initiales et doivent être conservés dans les quatre états. Aucun index expérimental n’est présent au contrôle initial. L’index unique commence déjà par `client_id` ; un nouvel index simple peut donc recouvrir une partie de son usage. Le gain éventuel devra être démontré par les plans, les mesures et les tailles. Contrôle initial des clients :
+
+```sql
+SELECT client_id,
+       count(*) AS nombre_commandes,
+       sum(total) AS montant_total
+FROM shopflow.commandes
+WHERE client_id IN (1, 42, 999)
+GROUP BY client_id
+ORDER BY client_id;
+```
+
+| Client | Nombre de commandes observé | Montant total observé |
+|---|---:|---:|
+| 1 | 100 | 17 250,00 |
+| 42 | 100 | 47 760,00 |
+| 999 | 100 | 25 621,25 |
+
+Ces montants portent sur toutes les commandes de chaque client, et non sur les 20 lignes de l’historique limité. Le contenu initial avec `LIMIT 20` a été communiqué pour le client 42 : **20 lignes**, toutes au statut `payee`, chacune de montant **720,00**, soit **14 400,00** au total. Les identifiants vont de 86042 à 29042, par pas de −3000 dans l’ordre retourné ; les dates vont du 12 septembre 2026 à 23:54:02 UTC au même jour à 08:04:02 UTC, par pas de −50 minutes. La transcription complète et ordonnée est conservée dans [le CSV de référence](preuves/atelier3_reference_client42.csv). La référence du client 1 est également recueillie (voir ci-dessous). La référence du client 999 est également recueillie (voir ci-dessous). Après la collecte de l’état initial, l’étudiant a exécuté :
+
+```sql
+CREATE INDEX idx_atelier3_client_simple
+ON shopflow.commandes (client_id);
+```
+
+Création annoncée avec succès par pgAdmin en **215 ms**. Cette durée est celle affichée par l’interface pour le DDL ; elle n’est pas une mesure `Execution Time` de lecture ou d’insertion. L’état testé suivant ajoute cet index simple aux deux index de contraintes initiaux. Sa définition et sa taille ont été vérifiées dans pg_indexes : index B-tree sur client_id, 704 512 octets (688 kB). Aucun autre index expérimental n’est présent.
+
+## Tailles des index — état initial
+
+| Index | Taille en octets | Taille lisible PostgreSQL |
 |---|---:|---|
-| 1 | 17 250,00 | 20 lignes, 1 725,00 |
-| 42 | 47 760,00 | 20 lignes, 14 400,00 |
-| 999 | 25 621,25 | 20 lignes, 7 725,00 |
+| commandes_client_id_cle_idempotence_key | 1 908 736 | 1864 kB |
+| commandes_pkey | 4 513 792 | 4408 kB |
 
-Le résultat du client 42 est identique dans les quatre états : identifiants **86042 à 29042**, par pas de −3000 ; dates du **12/09/2026 23:54:02 UTC au 12/09/2026 08:04:02 UTC**, par pas de −50 minutes ; statut `payee`, **720,00** par ligne.
+Total initial des deux index de `commandes` : **6 422 528 octets**. Tailles observées avant les tests d’insertion. Les contraintes et leurs index sont conservés pour les variantes suivantes.
 
-## 2. Appliquer les solutions successives
-
-Un seul index expérimental à la fois ; les index des contraintes sont conservés.
-
-**Index simple :**
+## Contrôle après les insertions annulées — état initial
 
 ```sql
-CREATE INDEX idx_atelier3_client_simple ON shopflow.commandes (client_id);
+SELECT count(*) AS nombre_commandes,
+       max(id) AS id_maximum,
+       sum(total) AS montant_global
+FROM shopflow.commandes;
 ```
 
-**Remplacement par le composé :**
+Résultat communiqué après les lots d’insertion : **100 000 commandes**, **id maximal 100 000**, **montant global 29 775 001,25**. Ces trois valeurs correspondent à l’état initial. Ce contrôle valide les invariants relevés après les annulations, sans constituer une comparaison exhaustive ligne par ligne. Les effets physiques des insertions annulées restent possibles.
+
+## Tableau de décision — lectures mesurées
+
+| État | Client | p50 ms | p95 empirique ms | Buffers hit | Taille de l’index expérimental |
+|---|---:|---:|---:|---:|---|
+| Initial | 42 | 1,061 | 1,834 | 90 | Aucun |
+| Initial | 1 | 1,656 | 2,336 | 99 | Aucun |
+| Initial | 999 | 1,571 | 2,264 | 97 | Aucun |
+| Simple | 42 | 1,989 | 2,907 | 90 | 688 kB |
+| Simple | 1 | 1,785 | 2,050 | 99 | 688 kB |
+| Simple | 999 | 1,707 | 1,886 | 97 | 688 kB |
+| Composé | 42 | 0,496 | 0,684 | 23 | 3984 kB |
+| Couvrant | 42 | 0,234 | 0,406 | 4 | 5792 kB |
+
+## Insertions mesurées — lot de 1 000 commandes
+
+| État | Répétitions | Moyenne ms | p50 ms | p95 empirique ms |
+|---|---:|---:|---:|---:|
+| Initial | 5 | 26,868 | 20,052 | 53,759 |
+| Simple | 5 | 22,372 | 22,712 | 26,996 |
+
+## Décision fondée sur les lectures du client 42
+
+L’index couvrant donne la meilleure lecture observée : médiane de 0,234 ms, quatre accès aux blocs en cache et zéro Heap Fetch dans les cinq plans. Il occupe 5792 kB. L’index composé supprime aussi le tri et donne une médiane de 0,496 ms, pour 3984 kB. L’index simple conserve la récupération de 100 commandes avant tri et les mêmes buffers que l’état initial. Les résultats des 20 commandes du client 42 sont identiques dans les quatre états. Cette comparaison porte sur l’historique limité à 20 commandes du client 42 ; les tableaux d’insertion portent sur les états initial et simple.
+
+[Mesures brutes](preuves/atelier3_mesures.csv), [statistiques](preuves/atelier3_synthese.csv), [tailles des index](preuves/atelier3_tailles_index.csv) et [graphique](preuves/atelier3_graphique.svg).
+
+![Lectures du client 42](preuves/atelier3_graphique.svg)
+
+## Mesures de lecture — état initial, client 42
+
+| Échauffement (exclu) | Mesure 1 | Mesure 2 | Mesure 3 | Mesure 4 | Mesure 5 |
+|---|---|---|---|---|---|
+
+### Échauffement — état initial, client 42
 
 ```sql
-BEGIN;
-DROP INDEX shopflow.idx_atelier3_client_simple;
-CREATE INDEX idx_atelier3_hist_compose
-ON shopflow.commandes (client_id, created_at DESC, id DESC);
-COMMIT;
-```
-
-**Remplacement par le couvrant :**
-
-```sql
-BEGIN;
-DROP INDEX shopflow.idx_atelier3_hist_compose;
-CREATE INDEX idx_atelier3_hist_couvrant
-ON shopflow.commandes (client_id, created_at DESC, id DESC)
-INCLUDE (statut, total);
-COMMIT;
-```
-
-**Vérification de l’inventaire et des tailles à chaque état :**
-
-```sql
-SELECT indexname, indexdef,
-       pg_relation_size(format('%I.%I', schemaname, indexname)::regclass) AS octets
-FROM pg_indexes
-WHERE schemaname = 'shopflow' AND tablename = 'commandes'
-ORDER BY indexname;
-```
-
-## 3. Mesurer les lectures avant/après
-
-Méthode : contrôle du résultat, une exécution d’échauffement puis cinq répétitions du même SQL avec `EXPLAIN (ANALYZE, BUFFERS)`. Durée retenue : `Execution Time` (hors `Planning Time`). Échauffement exclu des statistiques.
-
-Préfixer la requête initiale par `EXPLAIN (ANALYZE, BUFFERS)`. Inventaire et contenu contrôlés après chaque changement. Initial/simple : clients 1, 42, 999 ; composé/couvrant : client 42.
-
-| État / requête | 1 (ms) | 2 | 3 | 4 | 5 | Moyenne | p50 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Initial | 1,834 | 0,951 | 1,113 | 1,061 | 0,928 | 1,177 | 1,061 |
-| Simple | 1,498 | 2,445 | 2,907 | 1,989 | 1,323 | 2,032 | 1,989 |
-| Composé | 0,496 | 0,684 | 0,227 | 0,562 | 0,427 | 0,479 | 0,496 |
-| Couvrant | 0,406 | 0,225 | 0,234 | 0,229 | 0,375 | 0,294 | 0,234 |
-
-## 4. Comparer et expliquer — client 42
-
-| État | Index effectivement utilisé | Travail observé | Buffers hit | Taille expérimentale |
-|---|---|---|---:|---:|
-| Initial | Index unique initial | 100 commandes, 88 blocs table, tri top-N 27 kB | 90 | — |
-| Simple | idx_atelier3_client_simple | Même récupération et tri | 90 | 704 512 octets |
-| Composé | idx_atelier3_hist_compose | Index Scan ordonné, 20 commandes, sans tri | 23 | 4 079 616 octets |
-| Couvrant | idx_atelier3_hist_couvrant | Index Only Scan, 20 commandes, Heap Fetches=0 | 4 | 5 931 008 octets |
-
-- **Simple :** filtre déjà couvert par le préfixe de l’index unique ; aucun travail de lecture évité.
-- **Composé :** l’ordre de l’index correspond au tri ; LIMIT arrête la lecture après 20 lignes. Moyenne **−59,3 %**, médiane **−53,3 %** par rapport à l’état initial.
-- **Couvrant :** statut et total sont dans l’index ; les cinq plans évitent les visites à la table. Moyenne **−75,0 %**, médiane **−77,9 %** par rapport à l’état initial. Stockage **+45,4 %** par rapport au composé.
-
-**Décision de lecture :** retenir le couvrant pour la requête testée du client 42 ; le composé est une alternative moins volumineuse. Le zéro Heap Fetch observé dépend de la visibilité des pages.
-
-## 5. Mesurer les insertions — états initial et simple
-
-Même lot de 1 000 commandes. Exécuter séparément BEGIN, EXPLAIN, puis ROLLBACK après avoir copié le plan. Un échauffement et cinq répétitions par état.
-
-```sql
-BEGIN;
 EXPLAIN (ANALYZE, BUFFERS)
-INSERT INTO shopflow.commandes (id, client_id, created_at, statut, total)
-SELECT b.max_id + g.n,
-       CASE g.n % 3 WHEN 0 THEN 1 WHEN 1 THEN 42 ELSE 999 END,
-       TIMESTAMPTZ '2026-10-05 12:00:00+00', 'payee', 0
-FROM (SELECT max(id) AS max_id FROM shopflow.commandes) b
-CROSS JOIN generate_series(1, 1000) AS g(n);
-ROLLBACK;
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 42
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
 ```
-
-| État / requête | 1 (ms) | 2 | 3 | 4 | 5 | Moyenne | p50 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Initial | 53,759 | 27,691 | 18,113 | 14,727 | 20,052 | 26,868 | 20,052 |
-| Simple | 22,712 | 25,532 | 26,996 | 17,117 | 19,502 | 22,372 | 22,712 |
-
-Médiane initiale **20,052 ms**, simple **22,712 ms**. Le calcul de max(id) varie entre **1 et 2 000 Heap Fetches** dans les plans d’insertion ; les durées incluent ce travail et les contrôles de clé étrangère. La variation empêche d’isoler le coût de maintenance du seul index.
-
-**Contrôle après annulation :**
-
-```sql
-SELECT count(*), max(id), sum(total) FROM shopflow.commandes;
-```
-
-Valeurs retrouvées après initial puis simple : **100 000 ; 100 000 ; 29 775 001,25**. ROLLBACK conserve le contenu logique ; les tailles des index initiaux ont augmenté pendant les essais.
-
-**Preuves :** voir l’annexe A3 du présent document.
-
-## Annexe A3 — Plans complets
-
-### A3-01 — Décision fondée sur les lectures du client 42 / Mesures de lecture — état initial, client 42 / Échauffement — état initial, client 42
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.617..1.627 rows=20.00 loops=1)
@@ -147,7 +138,11 @@ Planning Time: 0.763 ms
 Execution Time: 1.872 ms
 ```
 
-### A3-02 — Mesures de lecture — état initial, client 42 / Échauffement — état initial, client 42 / Mesure 1 — état initial, client 42
+Le plan utilise l’index unique initial pour trouver 100 commandes, visite 88 blocs de table distincts et trie ces commandes en `top-N heapsort` (27 kB) pour retourner 20 lignes. Le nœud racine rapporte 90 accès aux blocs en cache, dont 2 pour l’index ; les compteurs parents incluent ceux des enfants. Aucun `shared read` n’est rapporté. Cet échauffement est exclu des cinq mesures.
+
+### Mesure 1 — état initial, client 42
+
+SQL : identique au bloc de l’échauffement ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.669..1.683 rows=20.00 loops=1)
@@ -168,7 +163,9 @@ Planning Time: 0.591 ms
 Execution Time: 1.834 ms
 ```
 
-### A3-03 — Échauffement — état initial, client 42 / Mesure 1 — état initial, client 42 / Mesure 2 — état initial, client 42
+### Mesure 2 — état initial, client 42
+
+SQL : identique au bloc de l’échauffement ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=0.883..0.890 rows=20.00 loops=1)
@@ -189,7 +186,9 @@ Planning Time: 0.587 ms
 Execution Time: 0.951 ms
 ```
 
-### A3-04 — Mesure 1 — état initial, client 42 / Mesure 2 — état initial, client 42 / Mesure 3 — état initial, client 42
+### Mesure 3 — état initial, client 42
+
+SQL : identique au bloc de l’échauffement ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=0.984..0.990 rows=20.00 loops=1)
@@ -210,7 +209,9 @@ Planning Time: 0.726 ms
 Execution Time: 1.113 ms
 ```
 
-### A3-05 — Mesure 2 — état initial, client 42 / Mesure 3 — état initial, client 42 / Mesure 4 — état initial, client 42
+### Mesure 4 — état initial, client 42
+
+SQL : identique au bloc de l’échauffement ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=0.985..0.991 rows=20.00 loops=1)
@@ -231,7 +232,9 @@ Planning Time: 0.237 ms
 Execution Time: 1.061 ms
 ```
 
-### A3-06 — Mesure 3 — état initial, client 42 / Mesure 4 — état initial, client 42 / Mesure 5 — état initial, client 42
+### Mesure 5 — état initial, client 42
+
+SQL : identique au bloc de l’échauffement ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=0.801..0.807 rows=20.00 loops=1)
@@ -252,7 +255,30 @@ Planning Time: 0.234 ms
 Execution Time: 0.928 ms
 ```
 
-### A3-07 — Référence de contenu — client 1, état initial / Mesures de lecture — état initial, client 1 / Échauffement — état initial, client 1
+Synthèse initiale, client 42 : moyenne **1,177 ms**, p50 **1,061 ms**, p95 empirique **1,834 ms**, minimum **0,928 ms**, maximum **1,834 ms**. Les cinq plans récupèrent 100 commandes, puis retournent 20 lignes après tri top-N en mémoire (27 kB) ; 90 accès aux blocs en cache et 88 blocs de table distincts à chaque mesure. Le p95 utilise le rang ceil(0,95 × 5), donc le maximum de ce petit échantillon.
+
+## Référence de contenu — client 1, état initial
+
+Résultat communiqué : **20 lignes**, toutes au statut `annulee`, chacune de montant **86,25**, soit **1 725,00** au total. Les identifiants vont de 86001 à 29001, par pas de −3000 dans l’ordre retourné. Les dates vont du 26 août 2026 à 23:53:21 UTC au même jour à 08:03:21 UTC, par pas de −50 minutes. La transcription complète et ordonnée figure dans [le CSV de référence du client 1](preuves/atelier3_reference_client1.csv).
+
+## Mesures de lecture — état initial, client 1
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 1
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+| Échauffement (exclu) | Mesure 1 | Mesure 2 | Mesure 3 | Mesure 4 | Mesure 5 |
+|---|---|---|---|---|---|
+| 5,290 ms | 2,160 ms | 1,656 ms | 1,211 ms | 2,336 ms | 1,654 ms |
+
+### Échauffement — état initial, client 1
+
+SQL : identique au bloc du client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=5.122..5.136 rows=20.00 loops=1)
@@ -273,7 +299,11 @@ Planning Time: 0.556 ms
 Execution Time: 5.290 ms
 ```
 
-### A3-08 — Mesures de lecture — état initial, client 1 / Échauffement — état initial, client 1 / Mesure 1 — état initial, client 1
+Cet échauffement est exclu des cinq mesures. Le plan récupère 100 commandes réparties sur 97 blocs de table distincts, puis retourne 20 lignes après tri top-N en mémoire (27 kB). Le nœud racine rapporte 99 accès aux blocs en cache, dont 2 pour l’index. Aucun `shared read` n’est rapporté. La cause du temps plus élevé que celui de l’échauffement du client 42 ne peut pas être établie à partir de ce seul plan.
+
+### Mesure 1 — état initial, client 1
+
+SQL : identique au bloc du client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.969..1.995 rows=20.00 loops=1)
@@ -294,7 +324,9 @@ Planning Time: 1.270 ms
 Execution Time: 2.160 ms
 ```
 
-### A3-09 — Échauffement — état initial, client 1 / Mesure 1 — état initial, client 1 / Mesure 2 — état initial, client 1
+### Mesure 2 — état initial, client 1
+
+SQL : identique au bloc du client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.557..1.569 rows=20.00 loops=1)
@@ -315,7 +347,9 @@ Planning Time: 0.258 ms
 Execution Time: 1.656 ms
 ```
 
-### A3-10 — Mesure 1 — état initial, client 1 / Mesure 2 — état initial, client 1 / Mesure 3 — état initial, client 1
+### Mesure 3 — état initial, client 1
+
+SQL : identique au bloc du client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.105..1.117 rows=20.00 loops=1)
@@ -336,7 +370,9 @@ Planning Time: 0.408 ms
 Execution Time: 1.211 ms
 ```
 
-### A3-11 — Mesure 2 — état initial, client 1 / Mesure 3 — état initial, client 1 / Mesure 4 — état initial, client 1
+### Mesure 4 — état initial, client 1
+
+SQL : identique au bloc du client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=2.160..2.180 rows=20.00 loops=1)
@@ -357,7 +393,9 @@ Planning Time: 0.854 ms
 Execution Time: 2.336 ms
 ```
 
-### A3-12 — Mesure 3 — état initial, client 1 / Mesure 4 — état initial, client 1 / Mesure 5 — état initial, client 1
+### Mesure 5 — état initial, client 1
+
+SQL : identique au bloc du client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.515..1.524 rows=20.00 loops=1)
@@ -378,7 +416,30 @@ Planning Time: 0.998 ms
 Execution Time: 1.654 ms
 ```
 
-### A3-13 — Référence de contenu — client 999, état initial / Mesures de lecture — état initial, client 999 / Échauffement — état initial, client 999
+Synthèse initiale, client 1 : moyenne **1,803 ms**, p50 **1,656 ms**, p95 empirique **2,336 ms**, minimum **1,211 ms**, maximum **2,336 ms**. Les cinq plans récupèrent 100 commandes puis retournent 20 lignes après tri top-N en mémoire (27 kB). Chaque plan rapporte 99 accès aux blocs en cache et 97 blocs de table distincts. Le p95 empirique correspond au maximum sur cinq mesures ; l’échauffement est exclu.
+
+## Référence de contenu — client 999, état initial
+
+Résultat communiqué : **20 lignes**, toutes au statut `payee`, chacune de montant **386,25**, soit **7 725,00** au total. Les identifiants vont de 83999 à 26999 par pas de −3000, dans l’ordre retourné. Les dates vont du 21 septembre 2026 à 23:19:59 UTC au même jour à 07:29:59 UTC, par pas de −50 minutes. La transcription complète et ordonnée est conservée dans [le CSV de référence du client 999](preuves/atelier3_reference_client999.csv).
+
+## Mesures de lecture — état initial, client 999
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 999
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+| Échauffement (exclu) | Mesure 1 | Mesure 2 | Mesure 3 | Mesure 4 | Mesure 5 |
+|---|---|---|---|---|---|
+| 2,364 ms | 1,309 ms | 1,693 ms | 1,220 ms | 2,264 ms | 1,571 ms |
+
+### Échauffement — état initial, client 999
+
+SQL : identique au bloc du client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=2.061..2.073 rows=20.00 loops=1)
@@ -399,7 +460,11 @@ Planning Time: 0.947 ms
 Execution Time: 2.364 ms
 ```
 
-### A3-14 — Mesures de lecture — état initial, client 999 / Échauffement — état initial, client 999 / Mesure 1 — état initial, client 999
+Cet échauffement est exclu des cinq mesures. Le plan récupère 100 commandes réparties sur 95 blocs de table distincts, puis retourne 20 lignes après tri top-N en mémoire (27 kB). Le nœud racine rapporte 97 accès aux blocs en cache, dont 2 pour l’index. Aucun `shared read` n’est rapporté.
+
+### Mesure 1 — état initial, client 999
+
+SQL : identique au bloc du client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.199..1.206 rows=20.00 loops=1)
@@ -420,7 +485,9 @@ Planning Time: 0.501 ms
 Execution Time: 1.309 ms
 ```
 
-### A3-15 — Échauffement — état initial, client 999 / Mesure 1 — état initial, client 999 / Mesure 2 — état initial, client 999
+### Mesure 2 — état initial, client 999
+
+SQL : identique au bloc du client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.544..1.556 rows=20.00 loops=1)
@@ -441,7 +508,9 @@ Planning Time: 0.540 ms
 Execution Time: 1.693 ms
 ```
 
-### A3-16 — Mesure 1 — état initial, client 999 / Mesure 2 — état initial, client 999 / Mesure 3 — état initial, client 999
+### Mesure 3 — état initial, client 999
+
+SQL : identique au bloc du client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.125..1.135 rows=20.00 loops=1)
@@ -462,7 +531,9 @@ Planning Time: 0.466 ms
 Execution Time: 1.220 ms
 ```
 
-### A3-17 — Mesure 2 — état initial, client 999 / Mesure 3 — état initial, client 999 / Mesure 4 — état initial, client 999
+### Mesure 4 — état initial, client 999
+
+SQL : identique au bloc du client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=2.106..2.119 rows=20.00 loops=1)
@@ -483,7 +554,9 @@ Planning Time: 0.601 ms
 Execution Time: 2.264 ms
 ```
 
-### A3-18 — Mesure 3 — état initial, client 999 / Mesure 4 — état initial, client 999 / Mesure 5 — état initial, client 999
+### Mesure 5 — état initial, client 999
+
+SQL : identique au bloc du client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.522..1.528 rows=20.00 loops=1)
@@ -504,7 +577,34 @@ Planning Time: 0.267 ms
 Execution Time: 1.571 ms
 ```
 
-### A3-19 — Mesure 5 — état initial, client 999 / Insertion — protocole commun aux quatre états / Échauffement documenté — insertion, état initial
+Synthèse initiale, client 999 : moyenne **1,611 ms**, p50 **1,571 ms**, p95 empirique **2,264 ms**, minimum **1,220 ms**, maximum **2,264 ms**. Les cinq plans rapportent 97 accès aux blocs en cache et 95 blocs de table distincts ; 100 commandes sont récupérées avant le tri top-N de 27 kB et la limitation à 20 lignes. Échauffement exclu.
+
+## Insertion — protocole commun aux quatre états
+
+Lot de 1 000 commandes synthétiques, réparties sur les clients 1, 42 et 999, sans lignes associées. Identifiants supérieurs au maximum courant, date fixe, statut `payee`, total 0 et clé d’idempotence NULL. Chaque exécution utilise une transaction terminée par `ROLLBACK`. Aucun autre écrivain ne doit intervenir pendant ces essais. Le lot mesure uniquement l’insertion dans `commandes`, pas un achat complet ni le commit durable. Une exécution d’échauffement, puis cinq mesures par état. Conserver chaque plan complet et `Execution Time`. Le calcul du maximum et la génération du lot sont inclus dans la mesure et restent identiques entre variantes. ROLLBACK restaure le contenu logique mais peut laisser des tuples morts, du WAL et des changements de cache ou de taille ; ces limites devront être prises en compte pour les comparaisons, notamment la visibilité de l’index couvrant.
+
+```sql
+BEGIN;
+
+EXPLAIN (ANALYZE, BUFFERS)
+INSERT INTO shopflow.commandes
+  (id, client_id, created_at, statut, total)
+SELECT b.max_id + g.n,
+       CASE g.n % 3 WHEN 0 THEN 1 WHEN 1 THEN 42 ELSE 999 END,
+       TIMESTAMPTZ '2026-10-05 12:00:00+00',
+       'payee',
+       0
+FROM (SELECT max(id) AS max_id FROM shopflow.commandes) b
+CROSS JOIN generate_series(1, 1000) AS g(n);
+
+ROLLBACK;
+```
+
+État initial : un échauffement documenté et cinq mesures conservés. Les tailles initiales ont été relevées avant ce lot.
+
+### Échauffement documenté — insertion, état initial
+
+Une première exécution du bloc complet a été annoncée par pgAdmin en 179 ms, sans plan transmis. Cette durée porte sur le bloc complet et n’est pas utilisée comme mesure d’Execution Time. Une seconde exécution, avec BEGIN, EXPLAIN et ROLLBACK séparés, fournit l’échauffement documenté ci-dessous. L’étudiant a confirmé l’exécution du ROLLBACK de cette seconde exécution ; les insertions de ce lot n’ont pas été conservées. SQL : lot de 1 000 insertions décrit dans le protocole commun ci-dessus.
 
 ```text
 Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=27.347..27.354 rows=0.00 loops=1)
@@ -526,7 +626,11 @@ Trigger for constraint commandes_client_id_fkey: time=6.030 calls=1000
 Execution Time: 33.894 ms
 ```
 
-### A3-20 — Insertion — protocole commun aux quatre états / Échauffement documenté — insertion, état initial / Mesure 1 — insertion, état initial
+Échauffement exclu des cinq mesures : **33,894 ms**. Le plan génère 1 000 lignes ; le nœud Insert affiche zéro ligne de sortie en l’absence de RETURNING. Il rapporte 5 484 accès aux blocs en cache et 8 blocs salis. Le contrôle de clé étrangère est appelé 1 000 fois (6,030 ms rapportées, incluses dans Execution Time). La recherche de max(id) rapporte 1 000 Heap Fetches, compatibles avec les tuples des insertions précédentes annulées ; cette cause est une hypothèse, non une vérification physique. Les répétitions avec ROLLBACK peuvent ainsi modifier le travail de recherche du maximum. Aucun nettoyage intermédiaire n’a été rapporté.
+
+### Mesure 1 — insertion, état initial
+
+SQL : identique au lot de 1 000 insertions du protocole commun, entre BEGIN et ROLLBACK. Résultat transmis après la consigne d’annulation du lot.
 
 ```text
 Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=48.282..48.318 rows=0.00 loops=1)
@@ -548,7 +652,11 @@ Trigger for constraint commandes_client_id_fkey: time=5.044 calls=1000
 Execution Time: 53.759 ms
 ```
 
-### A3-21 — Échauffement documenté — insertion, état initial / Mesure 1 — insertion, état initial / Mesure 2 — insertion, état initial
+Execution Time : **53,759 ms**. Le nœud Insert rapporte 5 485 accès aux blocs en cache, 28 blocs salis et 1 bloc écrit. Le calcul du maximum nécessite 1 000 Heap Fetches ; son travail est inclus dans cette mesure, ainsi que les contrôles de clé étrangère (1 000 appels, 5,044 ms rapportées). Les compteurs et temps parents incluent le travail des enfants et ne doivent pas être additionnés.
+
+### Mesure 2 — insertion, état initial
+
+SQL : identique au lot de 1 000 insertions du protocole commun, entre BEGIN et ROLLBACK.
 
 ```text
 Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=19.744..19.753 rows=0.00 loops=1)
@@ -570,7 +678,11 @@ Trigger for constraint commandes_client_id_fkey: time=7.480 calls=1000
 Execution Time: 27.691 ms
 ```
 
-### A3-22 — Mesure 1 — insertion, état initial / Mesure 2 — insertion, état initial / Mesure 3 — insertion, état initial
+Execution Time : **27,691 ms**. Le nœud Insert rapporte 5 465 accès aux blocs en cache, 38 blocs salis et 9 blocs écrits. Le calcul du maximum rapporte toujours 1 000 Heap Fetches. Les contrôles de clé étrangère totalisent 1 000 appels et 7,480 ms, incluses dans Execution Time.
+
+### Mesure 3 — insertion, état initial
+
+SQL : identique au lot de 1 000 insertions du protocole commun, entre BEGIN et ROLLBACK.
 
 ```text
 Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=11.360..11.369 rows=0.00 loops=1)
@@ -592,7 +704,11 @@ Trigger for constraint commandes_client_id_fkey: time=6.362 calls=1000
 Execution Time: 18.113 ms
 ```
 
-### A3-23 — Mesure 2 — insertion, état initial / Mesure 3 — insertion, état initial / Mesure 4 — insertion, état initial
+Execution Time : **18,113 ms**. Le nœud Insert rapporte 5 481 accès aux blocs en cache et 8 blocs salis. Les 1 000 contrôles de clé étrangère prennent 6,362 ms rapportées, incluses dans Execution Time. Le calcul du maximum conserve 1 000 Heap Fetches.
+
+### Mesure 4 — insertion, état initial
+
+SQL : identique au lot de 1 000 insertions du protocole commun, entre BEGIN et ROLLBACK.
 
 ```text
 Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=10.035..10.041 rows=0.00 loops=1)
@@ -614,7 +730,9 @@ Trigger for constraint commandes_client_id_fkey: time=4.450 calls=1000
 Execution Time: 14.727 ms
 ```
 
-### A3-24 — Mesure 3 — insertion, état initial / Mesure 4 — insertion, état initial / Mesure 5 — insertion, état initial
+### Mesure 5 — insertion, état initial
+
+SQL : identique au lot de 1 000 insertions du protocole commun, entre BEGIN et ROLLBACK.
 
 ```text
 Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=13.583..13.590 rows=0.00 loops=1)
@@ -636,7 +754,36 @@ Trigger for constraint commandes_client_id_fkey: time=6.040 calls=1000
 Execution Time: 20.052 ms
 ```
 
-### A3-25 — Tailles des index — état avec index simple / Mesures de lecture — index simple, client 42 / Échauffement — index simple, client 42
+Synthèse insertion initiale : moyenne **26,868 ms**, p50 **20,052 ms**, p95 empirique **53,759 ms**, minimum **14,727 ms**, maximum **53,759 ms**. Échauffement exclu. La recherche de max(id) passe de 1 000 Heap Fetches aux quatre premières mesures à 1 dans la cinquième. Un nettoyage ou un changement de visibilité peut expliquer cette évolution, mais aucun événement de ce type n’a été relevé : la cause reste non vérifiée. La comparaison des écritures devra tenir compte de ce travail variable inclus dans Execution Time.
+
+## Tailles des index — état avec index simple
+
+| Index | Taille en octets | Taille lisible PostgreSQL |
+|---|---:|---|
+| commandes_client_id_cle_idempotence_key | 2 015 232 | 1968 kB |
+| commandes_pkey | 4 554 752 | 4448 kB |
+| idx_atelier3_client_simple | 704 512 | 688 kB |
+
+Total des trois index : **7 274 496 octets**. Le seul index expérimental est `idx_atelier3_client_simple`, B-tree sur `client_id`. Les index initiaux ont augmenté respectivement de **106 496** et **40 960 octets** depuis le relevé avant insertions. Cette croissance est compatible avec les effets physiques des lots annulés ; elle ne doit pas être attribuée à la seule création de l’index simple. Sa taille propre est de 704 512 octets. Contrôle du contenu avec l’index simple, client 42 : les 20 lignes communiquées sont identiques à la référence initiale, pour toutes les colonnes et dans le même ordre (identifiants 86042 à 29042, dates du 12 septembre 2026 de 23:54:02 à 08:04:02 UTC, statut `payee`, montant 720,00 par ligne). Nombre de lignes et montant cumulé inchangés : **20**, **14 400,00**. Référence complète : [CSV du client 42](preuves/atelier3_reference_client42.csv). Contrôle du contenu avec l’index simple, client 1 : les 20 lignes communiquées sont identiques à la référence initiale pour toutes les colonnes et dans le même ordre. Identifiants 86001 à 29001, dates du 26 août 2026 de 23:53:21 à 08:03:21 UTC, statut `annulee`, montant 86,25 par ligne. Nombre de lignes et montant cumulé inchangés : **20**, **1 725,00**. Référence complète : [CSV du client 1](preuves/atelier3_reference_client1.csv).
+
+## Mesures de lecture — index simple, client 42
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 42
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+| Échauffement (exclu) | Mesure 1 | Mesure 2 | Mesure 3 | Mesure 4 | Mesure 5 |
+|---|---|---|---|---|---|
+| 1,937 ms | 1,498 ms | 2,445 ms | 2,907 ms | 1,989 ms | 1,323 ms |
+
+### Échauffement — index simple, client 42
+
+SQL : identique au bloc de lecture index simple, client 42 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.762..1.774 rows=20.00 loops=1)
@@ -657,7 +804,11 @@ Planning Time: 0.904 ms
 Execution Time: 1.937 ms
 ```
 
-### A3-26 — Mesures de lecture — index simple, client 42 / Échauffement — index simple, client 42 / Mesure 1 — index simple, client 42
+**Utilisation de l’index expérimental confirmée** par `Bitmap Index Scan on idx_atelier3_client_simple`, avec la condition `client_id = 42`. L’échauffement de 1,937 ms est exclu des cinq mesures. Le plan récupère 100 commandes, visite 88 blocs de table et trie en top-N (27 kB) pour retourner 20 lignes ; 90 accès aux blocs en cache, dont 2 pour l’index. Cette structure est identique à la référence, à l’exception du nom de l’index utilisé. Chaque plan de mesure sera contrôlé pour vérifier l’index choisi. Un index non choisi sera signalé comme tel et ne constituera pas une preuve de son utilisation ; aucun réglage ne sera utilisé pour forcer artificiellement son choix.
+
+### Mesure 1 — index simple, client 42
+
+SQL : identique au bloc de lecture index simple, client 42.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.359..1.386 rows=20.00 loops=1)
@@ -678,7 +829,9 @@ Planning Time: 0.636 ms
 Execution Time: 1.498 ms
 ```
 
-### A3-27 — Échauffement — index simple, client 42 / Mesure 1 — index simple, client 42 / Mesure 2 — index simple, client 42
+### Mesure 2 — index simple, client 42
+
+SQL : identique au bloc de lecture index simple, client 42.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=2.224..2.234 rows=20.00 loops=1)
@@ -699,7 +852,9 @@ Planning Time: 0.679 ms
 Execution Time: 2.445 ms
 ```
 
-### A3-28 — Mesure 1 — index simple, client 42 / Mesure 2 — index simple, client 42 / Mesure 3 — index simple, client 42
+### Mesure 3 — index simple, client 42
+
+SQL : identique au bloc de lecture index simple, client 42.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=2.455..2.513 rows=20.00 loops=1)
@@ -720,7 +875,9 @@ Planning Time: 1.508 ms
 Execution Time: 2.907 ms
 ```
 
-### A3-29 — Mesure 2 — index simple, client 42 / Mesure 3 — index simple, client 42 / Mesure 4 — index simple, client 42
+### Mesure 4 — index simple, client 42
+
+SQL : identique au bloc de lecture index simple, client 42.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.862..1.872 rows=20.00 loops=1)
@@ -741,7 +898,9 @@ Planning Time: 1.115 ms
 Execution Time: 1.989 ms
 ```
 
-### A3-30 — Mesure 3 — index simple, client 42 / Mesure 4 — index simple, client 42 / Mesure 5 — index simple, client 42
+### Mesure 5 — index simple, client 42
+
+SQL : identique au bloc de lecture index simple, client 42.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.179..1.187 rows=20.00 loops=1)
@@ -762,7 +921,22 @@ Planning Time: 0.507 ms
 Execution Time: 1.323 ms
 ```
 
-### A3-31 — Mesure 4 — index simple, client 42 / Mesure 5 — index simple, client 42 / Échauffement — index simple, client 1
+Synthèse index simple, client 42 : moyenne **2,032 ms**, p50 **1,989 ms**, p95 empirique **2,907 ms**, minimum **1,323 ms**, maximum **2,907 ms**. Les cinq plans utilisent effectivement `idx_atelier3_client_simple` et retournent 20 lignes après récupération de 100 commandes, visite de 88 blocs de table et tri top-N de 27 kB. Les 90 accès aux blocs en cache sont inchangés. Aucun gain structurel ni gain de durée n’est démontré : moyenne et médiane sont supérieures à la référence initiale (1,177 et 1,061 ms).```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 1
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+| Échauffement (exclu) | Mesure 1 | Mesure 2 | Mesure 3 | Mesure 4 | Mesure 5 |
+|---|---|---|---|---|---|
+| 2,994 ms | 2,050 ms | 1,785 ms | 2,033 ms | 1,737 ms | 1,492 ms |
+
+### Échauffement — index simple, client 1
+
+SQL : identique au bloc de lecture index simple, client 1 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=2.812..2.825 rows=20.00 loops=1)
@@ -783,7 +957,11 @@ Planning Time: 0.749 ms
 Execution Time: 2.994 ms
 ```
 
-### A3-32 — Mesure 5 — index simple, client 42 / Échauffement — index simple, client 1 / Mesure 1 — index simple, client 1
+Utilisation de l’index simple confirmée. Échauffement **2,994 ms**, exclu des cinq mesures. Le plan récupère 100 commandes sur 97 blocs de table distincts, puis retourne 20 lignes après tri top-N de 27 kB. Le nœud racine rapporte 99 accès aux blocs en cache, dont 2 pour l’index, sans shared read rapporté.
+
+### Mesure 1 — index simple, client 1
+
+SQL : identique au bloc de lecture index simple, client 1.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.757..1.769 rows=20.00 loops=1)
@@ -804,7 +982,9 @@ Planning Time: 0.883 ms
 Execution Time: 2.050 ms
 ```
 
-### A3-33 — Échauffement — index simple, client 1 / Mesure 1 — index simple, client 1 / Mesure 2 — index simple, client 1
+### Mesure 2 — index simple, client 1
+
+SQL : identique au bloc de lecture index simple, client 1.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.663..1.677 rows=20.00 loops=1)
@@ -825,7 +1005,9 @@ Planning Time: 0.566 ms
 Execution Time: 1.785 ms
 ```
 
-### A3-34 — Mesure 1 — index simple, client 1 / Mesure 2 — index simple, client 1 / Mesure 3 — index simple, client 1
+### Mesure 3 — index simple, client 1
+
+SQL : identique au bloc de lecture index simple, client 1.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.962..1.969 rows=20.00 loops=1)
@@ -846,7 +1028,9 @@ Planning Time: 0.518 ms
 Execution Time: 2.033 ms
 ```
 
-### A3-35 — Mesure 2 — index simple, client 1 / Mesure 3 — index simple, client 1 / Mesure 4 — index simple, client 1
+### Mesure 4 — index simple, client 1
+
+SQL : identique au bloc de lecture index simple, client 1.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.578..1.593 rows=20.00 loops=1)
@@ -867,7 +1051,9 @@ Planning Time: 0.497 ms
 Execution Time: 1.737 ms
 ```
 
-### A3-36 — Mesure 3 — index simple, client 1 / Mesure 4 — index simple, client 1 / Mesure 5 — index simple, client 1
+### Mesure 5 — index simple, client 1
+
+SQL : identique au bloc de lecture index simple, client 1.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.260..1.269 rows=20.00 loops=1)
@@ -888,7 +1074,30 @@ Planning Time: 1.283 ms
 Execution Time: 1.492 ms
 ```
 
-### A3-37 — Contrôle du contenu — index simple, client 999 / Mesures de lecture — index simple, client 999 / Échauffement — index simple, client 999
+Synthèse index simple, client 1 : moyenne **1,819 ms**, p50 **1,785 ms**, p95 empirique **2,050 ms**, minimum **1,492 ms**, maximum **2,050 ms**. Les cinq plans utilisent idx_atelier3_client_simple ; 100 commandes sont récupérées sur 97 blocs de table, puis triées en top-N (27 kB) pour retourner 20 lignes. Les 99 accès aux blocs en cache restent identiques à la référence initiale. La moyenne est proche de la référence initiale (1,803 ms), avec une médiane supérieure (1,656 ms initialement) : aucun gain de durée ni réduction du travail n’est démontré sur cette série.
+
+## Contrôle du contenu — index simple, client 999
+
+Les 20 lignes communiquées sont identiques à la référence initiale, pour toutes les colonnes et dans le même ordre : identifiants 83999 à 26999, dates du 21 septembre 2026 de 23:19:59 à 07:29:59 UTC, statut `payee`, montant 386,25 par ligne. Nombre de lignes et montant cumulé inchangés : **20**, **7 725,00**. Référence complète : [CSV du client 999](preuves/atelier3_reference_client999.csv).
+
+## Mesures de lecture — index simple, client 999
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, created_at, statut, total
+FROM shopflow.commandes
+WHERE client_id = 999
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+| Échauffement (exclu) | Mesure 1 | Mesure 2 | Mesure 3 | Mesure 4 | Mesure 5 |
+|---|---|---|---|---|---|
+| 2,047 ms | 1,773 ms | 1,666 ms | 1,886 ms | 1,707 ms | 1,155 ms |
+
+### Échauffement — index simple, client 999
+
+SQL : identique au bloc de lecture index simple, client 999 ci-dessus.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.892..1.909 rows=20.00 loops=1)
@@ -909,7 +1118,11 @@ Planning Time: 0.829 ms
 Execution Time: 2.047 ms
 ```
 
-### A3-38 — Mesures de lecture — index simple, client 999 / Échauffement — index simple, client 999 / Mesure 1 — index simple, client 999
+Utilisation de idx_atelier3_client_simple confirmée par le Bitmap Index Scan. Échauffement de **2,047 ms**, exclu des cinq mesures. Le plan récupère 100 commandes réparties sur 95 blocs de table puis retourne 20 lignes après tri top-N de 27 kB. Il rapporte 97 accès aux blocs en cache, dont 2 pour l’index, sans shared read rapporté.
+
+### Mesure 1 — index simple, client 999
+
+SQL : identique au bloc de lecture index simple, client 999.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.640..1.650 rows=20.00 loops=1)
@@ -930,7 +1143,9 @@ Planning Time: 1.019 ms
 Execution Time: 1.773 ms
 ```
 
-### A3-39 — Échauffement — index simple, client 999 / Mesure 1 — index simple, client 999 / Mesure 2 — index simple, client 999
+### Mesure 2 — index simple, client 999
+
+SQL : identique au bloc de lecture index simple, client 999.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.494..1.502 rows=20.00 loops=1)
@@ -951,7 +1166,9 @@ Planning Time: 0.425 ms
 Execution Time: 1.666 ms
 ```
 
-### A3-40 — Mesure 1 — index simple, client 999 / Mesure 2 — index simple, client 999 / Mesure 3 — index simple, client 999
+### Mesure 3 — index simple, client 999
+
+SQL : identique au bloc de lecture index simple, client 999.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.635..1.648 rows=20.00 loops=1)
@@ -972,7 +1189,9 @@ Planning Time: 0.593 ms
 Execution Time: 1.886 ms
 ```
 
-### A3-41 — Mesure 2 — index simple, client 999 / Mesure 3 — index simple, client 999 / Mesure 4 — index simple, client 999
+### Mesure 4 — index simple, client 999
+
+SQL : identique au bloc de lecture index simple, client 999.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.581..1.594 rows=20.00 loops=1)
@@ -993,7 +1212,9 @@ Planning Time: 0.661 ms
 Execution Time: 1.707 ms
 ```
 
-### A3-42 — Mesure 3 — index simple, client 999 / Mesure 4 — index simple, client 999 / Mesure 5 — index simple, client 999
+### Mesure 5 — index simple, client 999
+
+SQL : identique au bloc de lecture index simple, client 999.
 
 ```text
 Limit  (cost=329.84..329.89 rows=20 width=28) (actual time=1.115..1.120 rows=20.00 loops=1)
@@ -1014,298 +1235,4 @@ Planning Time: 0.279 ms
 Execution Time: 1.155 ms
 ```
 
-### A3-43 — Annexe 6 — Atelier 3 : plans composé et couvrant du client 42 / Index composé — SQL / Échauffement
-
-```text
-Limit  (cost=0.42..79.96 rows=20 width=28) (actual time=0.201..0.345 rows=20.00 loops=1)
-  Buffers: shared hit=23
-  ->  Index Scan using idx_atelier3_hist_compose on commandes  (cost=0.42..398.14 rows=100 width=28) (actual time=0.200..0.339 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Index Searches: 1
-        Buffers: shared hit=23
-Planning Time: 0.392 ms
-Execution Time: 0.388 ms
-```
-
-### A3-44 — Index composé — SQL / Échauffement / Mesure 1
-
-```text
-Limit  (cost=0.42..79.96 rows=20 width=28) (actual time=0.169..0.418 rows=20.00 loops=1)
-  Buffers: shared hit=23
-  ->  Index Scan using idx_atelier3_hist_compose on commandes  (cost=0.42..398.14 rows=100 width=28) (actual time=0.168..0.414 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Index Searches: 1
-        Buffers: shared hit=23
-Planning Time: 0.267 ms
-Execution Time: 0.496 ms
-```
-
-### A3-45 — Échauffement / Mesure 1 / Mesure 2
-
-```text
-Limit  (cost=0.42..79.96 rows=20 width=28) (actual time=0.238..0.531 rows=20.00 loops=1)
-  Buffers: shared hit=23
-  ->  Index Scan using idx_atelier3_hist_compose on commandes  (cost=0.42..398.14 rows=100 width=28) (actual time=0.237..0.517 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Index Searches: 1
-        Buffers: shared hit=23
-Planning Time: 1.219 ms
-Execution Time: 0.684 ms
-```
-
-### A3-46 — Mesure 1 / Mesure 2 / Mesure 3
-
-```text
-Limit  (cost=0.42..79.96 rows=20 width=28) (actual time=0.085..0.198 rows=20.00 loops=1)
-  Buffers: shared hit=23
-  ->  Index Scan using idx_atelier3_hist_compose on commandes  (cost=0.42..398.14 rows=100 width=28) (actual time=0.084..0.195 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Index Searches: 1
-        Buffers: shared hit=23
-Planning Time: 0.150 ms
-Execution Time: 0.227 ms
-```
-
-### A3-47 — Mesure 2 / Mesure 3 / Mesure 4
-
-```text
-Limit  (cost=0.42..79.96 rows=20 width=28) (actual time=0.180..0.503 rows=20.00 loops=1)
-  Buffers: shared hit=23
-  ->  Index Scan using idx_atelier3_hist_compose on commandes  (cost=0.42..398.14 rows=100 width=28) (actual time=0.179..0.495 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Index Searches: 1
-        Buffers: shared hit=23
-Planning Time: 0.324 ms
-Execution Time: 0.562 ms
-```
-
-### A3-48 — Mesure 3 / Mesure 4 / Mesure 5
-
-```text
-Limit  (cost=0.42..79.96 rows=20 width=28) (actual time=0.153..0.373 rows=20.00 loops=1)
-  Buffers: shared hit=23
-  ->  Index Scan using idx_atelier3_hist_compose on commandes  (cost=0.42..398.14 rows=100 width=28) (actual time=0.152..0.368 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Index Searches: 1
-        Buffers: shared hit=23
-Planning Time: 0.300 ms
-Execution Time: 0.427 ms
-```
-
-### A3-49 — Mesure 5 / Index couvrant — SQL / Échauffement
-
-```text
-Limit  (cost=0.42..1.57 rows=20 width=28) (actual time=0.136..0.142 rows=20.00 loops=1)
-  Buffers: shared hit=4
-  ->  Index Only Scan using idx_atelier3_hist_couvrant on commandes  (cost=0.42..6.17 rows=100 width=28) (actual time=0.135..0.137 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Heap Fetches: 0
-        Index Searches: 1
-        Buffers: shared hit=4
-Planning Time: 0.518 ms
-Execution Time: 0.192 ms
-```
-
-### A3-50 — Index couvrant — SQL / Échauffement / Mesure 1
-
-```text
-Limit  (cost=0.42..1.57 rows=20 width=28) (actual time=0.268..0.284 rows=20.00 loops=1)
-  Buffers: shared hit=4
-  ->  Index Only Scan using idx_atelier3_hist_couvrant on commandes  (cost=0.42..6.17 rows=100 width=28) (actual time=0.266..0.271 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Heap Fetches: 0
-        Index Searches: 1
-        Buffers: shared hit=4
-Planning Time: 0.455 ms
-Execution Time: 0.406 ms
-```
-
-### A3-51 — Échauffement / Mesure 1 / Mesure 2
-
-```text
-Limit  (cost=0.42..1.57 rows=20 width=28) (actual time=0.151..0.159 rows=20.00 loops=1)
-  Buffers: shared hit=4
-  ->  Index Only Scan using idx_atelier3_hist_couvrant on commandes  (cost=0.42..6.17 rows=100 width=28) (actual time=0.150..0.153 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Heap Fetches: 0
-        Index Searches: 1
-        Buffers: shared hit=4
-Planning Time: 0.233 ms
-Execution Time: 0.225 ms
-```
-
-### A3-52 — Mesure 1 / Mesure 2 / Mesure 3
-
-```text
-Limit  (cost=0.42..1.57 rows=20 width=28) (actual time=0.165..0.173 rows=20.00 loops=1)
-  Buffers: shared hit=4
-  ->  Index Only Scan using idx_atelier3_hist_couvrant on commandes  (cost=0.42..6.17 rows=100 width=28) (actual time=0.164..0.167 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Heap Fetches: 0
-        Index Searches: 1
-        Buffers: shared hit=4
-Planning Time: 0.438 ms
-Execution Time: 0.234 ms
-```
-
-### A3-53 — Mesure 2 / Mesure 3 / Mesure 4
-
-```text
-Limit  (cost=0.42..1.57 rows=20 width=28) (actual time=0.137..0.146 rows=20.00 loops=1)
-  Buffers: shared hit=4
-  ->  Index Only Scan using idx_atelier3_hist_couvrant on commandes  (cost=0.42..6.17 rows=100 width=28) (actual time=0.135..0.140 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Heap Fetches: 0
-        Index Searches: 1
-        Buffers: shared hit=4
-Planning Time: 0.295 ms
-Execution Time: 0.229 ms
-```
-
-### A3-54 — Mesure 3 / Mesure 4 / Mesure 5
-
-```text
-Limit  (cost=0.42..1.57 rows=20 width=28) (actual time=0.263..0.273 rows=20.00 loops=1)
-  Buffers: shared hit=4
-  ->  Index Only Scan using idx_atelier3_hist_couvrant on commandes  (cost=0.42..6.17 rows=100 width=28) (actual time=0.261..0.264 rows=20.00 loops=1)
-        Index Cond: (client_id = 42)
-        Heap Fetches: 0
-        Index Searches: 1
-        Buffers: shared hit=4
-Planning Time: 0.903 ms
-Execution Time: 0.375 ms
-```
-
-### A3-55 — Annexe 9 — Insertion avec index simple : plans complets / Échauffement
-
-```text
-Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=19.697..19.736 rows=0.00 loops=1)
-  Buffers: shared hit=8167 read=2 dirtied=35 written=5
-  ->  Nested Loop  (cost=0.46..32.97 rows=1000 width=104) (actual time=2.434..2.961 rows=1000.00 loops=1)
-        Buffers: shared hit=27 dirtied=5
-        ->  Result  (cost=0.46..0.47 rows=1 width=8) (actual time=2.313..2.315 rows=1.00 loops=1)
-              Buffers: shared hit=27 dirtied=5
-              InitPlan 1
-                ->  Limit  (cost=0.42..0.46 rows=1 width=8) (actual time=2.308..2.309 rows=1.00 loops=1)
-                      Buffers: shared hit=27 dirtied=5
-                      ->  Index Only Scan Backward using commandes_pkey on commandes commandes_1  (cost=0.42..3915.82 rows=100000 width=8) (actual time=2.306..2.307 rows=1.00 loops=1)
-                            Heap Fetches: 2000
-                            Index Searches: 1
-                            Buffers: shared hit=27 dirtied=5
-        ->  Function Scan on generate_series g  (cost=0.00..10.00 rows=1000 width=4) (actual time=0.107..0.244 rows=1000.00 loops=1)
-Planning:
-  Buffers: shared hit=3
-Planning Time: 1.703 ms
-Trigger for constraint commandes_client_id_fkey: time=7.535 calls=1000
-Execution Time: 28.261 ms
-```
-
-### A3-56 — Annexe 9 — Insertion avec index simple : plans complets / Échauffement / Mesure 1
-
-```text
-Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=16.779..16.790 rows=0.00 loops=1)
-  Buffers: shared hit=8178 dirtied=8
-  ->  Nested Loop  (cost=0.46..32.97 rows=1000 width=104) (actual time=0.928..1.826 rows=1000.00 loops=1)
-        Buffers: shared hit=18
-        ->  Result  (cost=0.46..0.47 rows=1 width=8) (actual time=0.767..0.776 rows=1.00 loops=1)
-              Buffers: shared hit=18
-              InitPlan 1
-                ->  Limit  (cost=0.42..0.46 rows=1 width=8) (actual time=0.762..0.767 rows=1.00 loops=1)
-                      Buffers: shared hit=18
-                      ->  Index Only Scan Backward using commandes_pkey on commandes commandes_1  (cost=0.42..3915.82 rows=100000 width=8) (actual time=0.758..0.763 rows=1.00 loops=1)
-                            Heap Fetches: 1000
-                            Index Searches: 1
-                            Buffers: shared hit=18
-        ->  Function Scan on generate_series g  (cost=0.00..10.00 rows=1000 width=4) (actual time=0.141..0.301 rows=1000.00 loops=1)
-Planning Time: 1.177 ms
-Trigger for constraint commandes_client_id_fkey: time=4.658 calls=1000
-Execution Time: 22.712 ms
-```
-
-### A3-57 — Échauffement / Mesure 1 / Mesure 2
-
-```text
-Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=19.747..19.759 rows=0.00 loops=1)
-  Buffers: shared hit=8191 dirtied=14 written=6
-  ->  Nested Loop  (cost=0.46..32.97 rows=1000 width=104) (actual time=1.115..1.688 rows=1000.00 loops=1)
-        Buffers: shared hit=18
-        ->  Result  (cost=0.46..0.47 rows=1 width=8) (actual time=0.922..0.928 rows=1.00 loops=1)
-              Buffers: shared hit=18
-              InitPlan 1
-                ->  Limit  (cost=0.42..0.46 rows=1 width=8) (actual time=0.918..0.923 rows=1.00 loops=1)
-                      Buffers: shared hit=18
-                      ->  Index Only Scan Backward using commandes_pkey on commandes commandes_1  (cost=0.42..3915.82 rows=100000 width=8) (actual time=0.917..0.922 rows=1.00 loops=1)
-                            Heap Fetches: 1000
-                            Index Searches: 1
-                            Buffers: shared hit=18
-        ->  Function Scan on generate_series g  (cost=0.00..10.00 rows=1000 width=4) (actual time=0.140..0.302 rows=1000.00 loops=1)
-Planning Time: 0.862 ms
-Trigger for constraint commandes_client_id_fkey: time=5.315 calls=1000
-Execution Time: 25.532 ms
-```
-
-### A3-58 — Mesure 1 / Mesure 2 / Mesure 3
-
-```text
-Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=21.693..21.700 rows=0.00 loops=1)
-  Buffers: shared hit=8159 dirtied=16 written=7
-  ->  Nested Loop  (cost=0.46..32.97 rows=1000 width=104) (actual time=0.913..1.556 rows=1000.00 loops=1)
-        Buffers: shared hit=18
-        ->  Result  (cost=0.46..0.47 rows=1 width=8) (actual time=0.764..0.769 rows=1.00 loops=1)
-              Buffers: shared hit=18
-              InitPlan 1
-                ->  Limit  (cost=0.42..0.46 rows=1 width=8) (actual time=0.760..0.761 rows=1.00 loops=1)
-                      Buffers: shared hit=18
-                      ->  Index Only Scan Backward using commandes_pkey on commandes commandes_1  (cost=0.42..3915.82 rows=100000 width=8) (actual time=0.759..0.760 rows=1.00 loops=1)
-                            Heap Fetches: 1000
-                            Index Searches: 1
-                            Buffers: shared hit=18
-        ->  Function Scan on generate_series g  (cost=0.00..10.00 rows=1000 width=4) (actual time=0.131..0.326 rows=1000.00 loops=1)
-Planning Time: 0.817 ms
-Trigger for constraint commandes_client_id_fkey: time=4.933 calls=1000
-Execution Time: 26.996 ms
-```
-
-### A3-59 — Mesure 2 / Mesure 3 / Mesure 4
-
-```text
-Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=7.646..7.652 rows=0.00 loops=1)
-  Buffers: shared hit=7553 dirtied=11 written=3
-  ->  Nested Loop  (cost=0.46..32.97 rows=1000 width=104) (actual time=0.116..0.491 rows=1000.00 loops=1)
-        Buffers: shared hit=8
-        ->  Result  (cost=0.46..0.47 rows=1 width=8) (actual time=0.045..0.046 rows=1.00 loops=1)
-              Buffers: shared hit=8
-              InitPlan 1
-                ->  Limit  (cost=0.42..0.46 rows=1 width=8) (actual time=0.042..0.042 rows=1.00 loops=1)
-                      Buffers: shared hit=8
-                      ->  Index Only Scan Backward using commandes_pkey on commandes commandes_1  (cost=0.42..3915.82 rows=100000 width=8) (actual time=0.041..0.041 rows=1.00 loops=1)
-                            Heap Fetches: 1
-                            Index Searches: 1
-                            Buffers: shared hit=8
-        ->  Function Scan on generate_series g  (cost=0.00..10.00 rows=1000 width=4) (actual time=0.063..0.154 rows=1000.00 loops=1)
-Planning Time: 0.289 ms
-Trigger for constraint commandes_client_id_fkey: time=9.297 calls=1000
-Execution Time: 17.117 ms
-```
-
-### A3-60 — Mesure 3 / Mesure 4 / Mesure 5
-
-```text
-Insert on commandes  (cost=0.46..32.97 rows=0 width=0) (actual time=14.549..14.561 rows=0.00 loops=1)
-  Buffers: shared hit=6056 dirtied=16 written=6
-  ->  Nested Loop  (cost=0.46..32.97 rows=1000 width=104) (actual time=0.598..1.061 rows=1000.00 loops=1)
-        Buffers: shared hit=5
-        ->  Result  (cost=0.46..0.47 rows=1 width=8) (actual time=0.381..0.382 rows=1.00 loops=1)
-              Buffers: shared hit=5
-              InitPlan 1
-                ->  Limit  (cost=0.42..0.46 rows=1 width=8) (actual time=0.360..0.361 rows=1.00 loops=1)
-                      Buffers: shared hit=5
-                      ->  Index Only Scan Backward using commandes_pkey on commandes commandes_1  (cost=0.42..3915.82 rows=100000 width=8) (actual time=0.359..0.359 rows=1.00 loops=1)
-                            Heap Fetches: 1
-                            Index Searches: 1
-                            Buffers: shared hit=5
-        ->  Function Scan on generate_series g  (cost=0.00..10.00 rows=1000 width=4) (actual time=0.184..0.318 rows=1000.00 loops=1)
-Planning Time: 1.138 ms
-Trigger for constraint commandes_client_id_fkey: time=4.451 calls=1000
-Execution Time: 19.502 ms
-```
+Synthèse index simple, client 999 : moyenne **1,637 ms**, p50 **1,707 ms**, p95 empirique **1,886 ms**, minimum **1,155 ms**, maximum **1,886 ms**. Index simple utilisé dans les cinq plans ; 100 commandes récupérées sur 95 blocs de table, tri top-N de 27 kB, 20 lignes retournées et 97 accès aux blocs en cache. La moyenne est proche de la référence initiale (1,611 ms), avec une médiane supérieure (1,571 ms initialement). Aucun gain structurel ni gain de durée démontré.
