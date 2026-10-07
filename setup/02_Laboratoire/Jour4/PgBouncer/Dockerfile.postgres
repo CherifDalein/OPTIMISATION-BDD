@@ -1,0 +1,4 @@
+FROM postgres:17-bookworm
+COPY init.sql /docker-entrypoint-initdb.d/01_pooling.sql
+COPY charge.sql /lab/charge.sql
+RUN chmod 755 /docker-entrypoint-initdb.d /lab && chmod 644 /docker-entrypoint-initdb.d/01_pooling.sql /lab/charge.sql
