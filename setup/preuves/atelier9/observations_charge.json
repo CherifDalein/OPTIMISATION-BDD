@@ -1,0 +1,85 @@
+{
+  "avant": {
+    "pool": {
+      "total": 5,
+      "inactives": 0,
+      "enAttente": 0
+    },
+    "redisPret": true,
+    "postgres_sessions": [
+      {
+        "state": "active",
+        "wait_type": "-",
+        "sessions": 1
+      },
+      {
+        "state": "idle",
+        "wait_type": "-",
+        "sessions": 2
+      },
+      {
+        "state": "idle",
+        "wait_type": "Client",
+        "sessions": 4
+      }
+    ],
+    "docker": {
+      "postgres": {
+        "cpu_pct": 95,
+        "memory_MiB": 90.55
+      },
+      "redis": {
+        "cpu_pct": 0.15,
+        "memory_MiB": 12.93
+      },
+      "pgadmin": {
+        "cpu_pct": 0.4,
+        "memory_MiB": 335
+      },
+      "fleetpulse-registry": {
+        "cpu_pct": 2.42,
+        "memory_MiB": 263.6
+      }
+    },
+    "niveau_charge": "non identifié"
+  },
+  "apres": {
+    "pool": {
+      "total": 1,
+      "inactives": 0,
+      "enAttente": 0
+    },
+    "redisPret": true,
+    "postgres_sessions": [
+      {
+        "state": "active",
+        "wait_type": "-",
+        "sessions": 1
+      },
+      {
+        "state": "idle",
+        "wait_type": "Client",
+        "sessions": 2
+      }
+    ],
+    "docker": {
+      "postgres": {
+        "cpu_pct": 21.38,
+        "memory_MiB": 83.46
+      },
+      "redis": {
+        "cpu_pct": 0.14,
+        "memory_MiB": 13.08
+      },
+      "pgadmin": {
+        "cpu_pct": 0.02,
+        "memory_MiB": 335.2
+      },
+      "fleetpulse-registry": {
+        "cpu_pct": 0.09,
+        "memory_MiB": 263.6
+      }
+    },
+    "niveau_charge": "non identifié"
+  }
+}

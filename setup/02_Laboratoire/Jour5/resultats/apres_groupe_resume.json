@@ -1,0 +1,62 @@
+[
+  {
+    "Label": "apres_groupe",
+    "Path": "/commandes?limit=20&pagination=curseur&relations=groupe",
+    "Clients": 1,
+    "WarmupSec": 10,
+    "MeasureSec": 30,
+    "Completed": 20954,
+    "Errors": 0,
+    "ErrorPct": "0.00",
+    "ThroughputReqSec": "698.43",
+    "P50Ms": "1.25",
+    "P95Ms": "1.98",
+    "MeanMs": "1.39",
+    "AvgSqlPerRequest": "2.00"
+  },
+  {
+    "Label": "apres_groupe",
+    "Path": "/commandes?limit=20&pagination=curseur&relations=groupe",
+    "Clients": 5,
+    "WarmupSec": 10,
+    "MeasureSec": 30,
+    "Completed": 47163,
+    "Errors": 0,
+    "ErrorPct": "0.00",
+    "ThroughputReqSec": "1572.00",
+    "P50Ms": "1.96",
+    "P95Ms": "7.31",
+    "MeanMs": "3.13",
+    "AvgSqlPerRequest": "2.00"
+  },
+  {
+    "Label": "apres_groupe",
+    "Path": "/commandes?limit=20&pagination=curseur&relations=groupe",
+    "Clients": 10,
+    "WarmupSec": 10,
+    "MeasureSec": 30,
+    "Completed": 75344,
+    "Errors": 0,
+    "ErrorPct": "0.00",
+    "ThroughputReqSec": "2511.27",
+    "P50Ms": "3.45",
+    "P95Ms": "6.45",
+    "MeanMs": "3.93",
+    "AvgSqlPerRequest": "2.00"
+  },
+  {
+    "Label": "apres_groupe",
+    "Path": "/commandes?limit=20&pagination=curseur&relations=groupe",
+    "Clients": 20,
+    "WarmupSec": 10,
+    "MeasureSec": 30,
+    "Completed": 67679,
+    "Errors": 0,
+    "ErrorPct": "0.00",
+    "ThroughputReqSec": "2255.59",
+    "P50Ms": "7.41",
+    "P95Ms": "15.50",
+    "MeanMs": "8.81",
+    "AvgSqlPerRequest": "2.00"
+  }
+]
