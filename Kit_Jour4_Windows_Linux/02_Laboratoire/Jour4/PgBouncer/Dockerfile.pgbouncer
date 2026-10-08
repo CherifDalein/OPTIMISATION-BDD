@@ -1,0 +1,6 @@
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends pgbouncer postgresql-client ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY pgbouncer.ini userlist.txt /etc/pgbouncer/
+RUN chown postgres:postgres /etc/pgbouncer/pgbouncer.ini /etc/pgbouncer/userlist.txt && chmod 640 /etc/pgbouncer/pgbouncer.ini /etc/pgbouncer/userlist.txt
+USER postgres
+CMD ["pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]

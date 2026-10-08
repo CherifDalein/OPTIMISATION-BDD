@@ -1,0 +1,4 @@
+{
+  "CACHE_TTL_SECONDS_avant": "5",
+  "TTL_effectif_par_defaut_si_absent": 5
+}

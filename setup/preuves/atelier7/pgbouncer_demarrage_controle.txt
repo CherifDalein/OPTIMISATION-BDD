@@ -1,0 +1,246 @@
+1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+#11 23.21 Setting up postgresql-common (248+deb12u1) ...
+#11 23.25 debconf: unable to initialize frontend: Dialog
+#11 23.25 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#11 23.25 debconf: falling back to frontend: Readline
+#11 23.25 debconf: unable to initialize frontend: Readline
+#11 23.25 debconf: (This frontend requires a controlling tty.)
+#11 23.25 debconf: falling back to frontend: Teletype
+#11 23.35 
+#11 23.35 Creating config file /etc/postgresql-common/createcluster.conf with new version
+#11 23.39 Building PostgreSQL dictionaries from installed myspell/hunspell packages...
+#11 23.39 Removing obsolete dictionary files:
+#11 23.40 invoke-rc.d: could not determine current runlevel
+#11 23.40 invoke-rc.d: policy-rc.d denied execution of start.
+#11 23.50 Setting up postgresql-client (15+248+deb12u1) ...
+#11 23.50 Setting up pgbouncer (1.18.0-1+deb12u1) ...
+#11 23.52 invoke-rc.d: could not determine current runlevel
+#11 23.52 invoke-rc.d: policy-rc.d denied execution of start.
+#11 23.58 Processing triggers for libc-bin (2.36-9+deb12u14) ...
+#11 23.58 Processing triggers for ca-certificates (20250419~deb12u1) ...
+#11 23.59 Updating certificates in /etc/ssl/certs...
+#11 23.77 0 added, 0 removed; done.
+#11 23.77 Running hooks in /etc/ca-certificates/update.d...
+#11 23.77 done.
+#11 DONE 24.0s
+
+#10 [bench 1/4] FROM docker.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+#10 sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 87.03MB / 113.41MB 45.3s
+#10 ...
+
+#12 [pgbouncer 3/4] COPY pgbouncer.ini userlist.txt /etc/pgbouncer/
+#12 DONE 0.1s
+
+#10 [bench 1/4] FROM docker.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+#10 ...
+
+#13 [pgbouncer 4/4] RUN chown postgres:postgres /etc/pgbouncer/pgbouncer.ini /etc/pgbouncer/userlist.txt && chmod 640 /etc/pgbouncer/pgbouncer.ini /etc/pgbouncer/userlist.txt
+#13 DONE 0.1s
+
+#10 [bench 1/4] FROM docker.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+#10 sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 93.32MB / 113.41MB 46.9s
+#10 ...
+
+#14 [pgbouncer] exporting to image
+#14 exporting layers 1.9s done
+#14 exporting manifest sha256:8ee164d93e246c11faa9072d172dfd3ea094d7d7fca15a6b13cb1182da86216f done
+#14 exporting config sha256:eb1d473a940ac39193e01bf79c8fb6297aedaa26d82872a04d7d9055b51823a8 done
+#14 exporting attestation manifest sha256:a3506782df462cd654189419b6d572daca7f4bdc7b00146519c78b6c72d23e34 done
+#14 exporting manifest list sha256:2fbf1d79f5c65564a30c25f9182e00f138824c0dc035082d020d0f58990ae500 done
+#14 naming to docker.io/library/shopflow-j4-pooling-pgbouncer:latest done
+#14 unpacking to docker.io/library/shopflow-j4-pooling-pgbouncer:latest 0.6s done
+#14 DONE 2.5s
+
+#10 [bench 1/4] FROM docker.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+#10 ...
+
+#15 [pgbouncer] resolving provenance for metadata file
+#15 DONE 0.0s
+
+#10 [bench 1/4] FROM docker.io/library/postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+#10 sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 99.61MB / 113.41MB 48.6s
+#10 sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 105.91MB / 113.41MB 51.0s
+#10 sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 112.20MB / 113.41MB 52.9s
+#10 sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 113.41MB / 113.41MB 53.3s done
+#10 extracting sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e
+#10 extracting sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 1.8s done
+#10 extracting sha256:4748d3f27fc2c572d39c935baa07dd3a52f733da0aa643455951416fc3dcb70e 1.8s done
+#10 extracting sha256:1e59678344bfcedf6c6f3f74952b7dc29d0f1f6ca41c4985b962acacb7990360 0.0s done
+#10 extracting sha256:33cdf0532a6a5d4bad1fcfe5fba9e036beba75598855958558056b5eb18abf92 done
+#10 extracting sha256:9be6a8c44616f92e608b8cc594476f2db73f2959bc951615d7ef4925c8487dbf done
+#10 extracting sha256:3211c9ff14a37a40933603dd306fb6cb67f71aebaf05ea9f16de3fa6e098fe15 done
+#10 extracting sha256:1bee21526d9de64a234685e8ab5d9c2a20815092a98f33c64d38321a0aecfd07 done
+#10 DONE 55.4s
+
+#16 [db 2/4] COPY init.sql /docker-entrypoint-initdb.d/01_pooling.sql
+#16 DONE 0.2s
+
+#17 [bench 3/4] COPY charge.sql /lab/charge.sql
+#17 DONE 0.0s
+
+#18 [db 4/4] RUN chmod 755 /docker-entrypoint-initdb.d /lab && chmod 644 /docker-entrypoint-initdb.d/01_pooling.sql /lab/charge.sql
+#18 DONE 0.2s
+
+#19 [db] exporting to image
+#19 exporting layers 0.1s done
+#19 exporting manifest sha256:03dd4a454e728de57e6b6d3dbd217825deb2bfc89781c5ed5272471d858528e8 done
+#19 exporting config sha256:d2246c1b56ce2abde35c715ab67aa429cda9490367dfce0d2186c291f86e4958 done
+#19 exporting attestation manifest sha256:1431e32e7b37a3bfe9df9e00134a2efa6bd32f577233b75cf82b97704bb95811 done
+#19 exporting manifest list sha256:32760fd2c2a74820b0ca8737416bd9902e57fa70c57f2c35f0791fc3eb271935 done
+#19 naming to docker.io/library/shopflow-j4-pooling-db:latest
+#19 naming to docker.io/library/shopflow-j4-pooling-db:latest done
+#19 unpacking to docker.io/library/shopflow-j4-pooling-db:latest 0.0s done
+#19 DONE 0.2s
+
+#20 [bench] exporting to image
+#20 exporting layers 0.1s done
+#20 exporting manifest sha256:a2013dfd7fab380f69152205d3baa39193c86555c2359aa46ac0bdb6dc778068 0.0s done
+#20 exporting config sha256:5d0d0472858160d4781ef09c87805660659f383e18103fabd5090d8423073e8e done
+#20 exporting attestation manifest sha256:ba9e7de8a1dc74bd63d9e89e38f38ae0fe864228f27ddae4c6cdecf885c7cb98 done
+#20 exporting manifest list sha256:39ffd5e5d5f443275d61ca0c118fcf43f094d3300141c7a59046d811524fbaf2 done
+#20 naming to docker.io/library/shopflow-j4-pooling-bench:latest done
+#20 unpacking to docker.io/library/shopflow-j4-pooling-bench:latest 0.0s done
+#20 DONE 0.2s
+
+#21 [bench] resolving provenance for metadata file
+#21 DONE 0.1s
+
+#22 [db] resolving provenance for metadata file
+#22 DONE 0.0s
+ Image shopflow-j4-pooling-db Built 
+ Image shopflow-j4-pooling-bench Built 
+ Image shopflow-j4-pooling-pgbouncer Built 
+ Network shopflow-j4-pooling_default Creating 
+ Volume shopflow-j4-pooling_pooling_data Creating 
+ Volume shopflow-j4-pooling_pooling_data Creating 
+ Network shopflow-j4-pooling_default Creating 
+ Volume shopflow-j4-pooling_pooling_data Created 
+ Volume shopflow-j4-pooling_pooling_data Created 
+ Network shopflow-j4-pooling_default Created 
+ Network shopflow-j4-pooling_default Created 
+ Container shopflow-j4-pooling-db-1 Creating 
+ Container shopflow-j4-pooling-db-1 Created 
+ Container shopflow-j4-pooling-pgbouncer-1 Creating 
+ Container shopflow-j4-pooling-bench-1 Creating 
+ Container shopflow-j4-pooling-pgbouncer-1 Created 
+ Container shopflow-j4-pooling-bench-1 Created 
+ Container shopflow-j4-pooling-db-1 Starting 
+ Container shopflow-j4-pooling-db-1 Started 
+ Container shopflow-j4-pooling-db-1 Waiting 
+ Container shopflow-j4-pooling-db-1 Waiting 
+ Container shopflow-j4-pooling-db-1 Healthy 
+ Container shopflow-j4-pooling-bench-1 Starting 
+ Container shopflow-j4-pooling-db-1 Healthy 
+ Container shopflow-j4-pooling-pgbouncer-1 Starting 
+ Container shopflow-j4-pooling-bench-1 Started 
+ Container shopflow-j4-pooling-pgbouncer-1 Started 
+ Container shopflow-j4-pooling-db-1 Waiting 
+ Container shopflow-j4-pooling-pgbouncer-1 Waiting 
+ Container shopflow-j4-pooling-bench-1 Waiting 
+ Container shopflow-j4-pooling-db-1 Healthy 
+ Container shopflow-j4-pooling-bench-1 Healthy 
+ Container shopflow-j4-pooling-pgbouncer-1 Healthy 
+PostgreSQL 17.11 (Debian 17.11-1.pgdg12+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+60
+1000
+
+PgBouncer 1.18.0
+libevent 2.1.12-stable
+adns: c-ares 1.18.1
+tls: OpenSSL 3.0.22 25 Aug 2026
+systemd: yes
+
+pgbench (PostgreSQL) 17.11 (Debian 17.11-1.pgdg12+2)
+
+db:5432 : 1000 produits accessibles avec le rôle atelier.
+pgbouncer:6432 : 1000 produits accessibles avec le rôle atelier.
+            key            |                                                             value                                                              |                                                            default                                                             | changeable 
+---------------------------+--------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------+------------
+ admin_users               | observateur                                                                                                                    |                                                                                                                                | yes
+ application_name_add_host | 0                                                                                                                              | 0                                                                                                                              | yes
+ auth_file                 | /etc/pgbouncer/userlist.txt                                                                                                    |                                                                                                                                | yes
+ auth_hba_file             |                                                                                                                                |                                                                                                                                | yes
+ auth_query                | SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname=$1 AND rolcanlogin | SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname=$1 AND rolcanlogin | yes
+ auth_type                 | scram-sha-256                                                                                                                  | md5                                                                                                                            | yes
+ auth_user                 |                                                                                                                                |                                                                                                                                | yes
+ autodb_idle_timeout       | 3600                                                                                                                           | 3600                                                                                                                           | yes
+ client_idle_timeout       | 0                                                                                                                              | 0                                                                                                                              | yes
+ client_login_timeout      | 60                                                                                                                             | 60                                                                                                                             | yes
+ client_tls_ca_file        |                                                                                                                                |                                                                                                                                | yes
+ client_tls_cert_file      |                                                                                                                                |                                                                                                                                | yes
+ client_tls_ciphers        | fast                                                                                                                           | fast                                                                                                                           | yes
+ client_tls_dheparams      | auto                                                                                                                           | auto                                                                                                                           | yes
+ client_tls_ecdhcurve      | auto                                                                                                                           | auto                                                                                                                           | yes
+ client_tls_key_file       |                                                                                                                                |                                                                                                                                | yes
+ client_tls_protocols      | secure                                                                                                                         | secure                                                                                                                         | yes
+ client_tls_sslmode        | disable                                                                                                                        | disable                                                                                                                        | yes
+ conffile                  | /etc/pgbouncer/pgbouncer.ini                                                                                                   |                                                                                                                                | yes
+ default_pool_size         | 5                                                                                                                              | 20                                                                                                                             | yes
+ disable_pqexec            | 0                                                                                                                              | 0                                                                                                                              | no
+ dns_max_ttl               | 15                                                                                                                             | 15                                                                                                                             | yes
+ dns_nxdomain_ttl          | 15                                                                                                                             | 15                                                                                                                             | yes
+ dns_zone_check_period     | 0                                                                                                                              | 0                                                                                                                              | yes
+ idle_transaction_timeout  | 0                                                                                                                              | 0                                                                                                                              | yes
+ ignore_startup_parameters |                                                                                                                                |                                                                                                                                | yes
+ job_name                  | pgbouncer                                                                                                                      | pgbouncer                                                                                                                      | no
+ listen_addr               | 0.0.0.0                                                                                                                        |                                                                                                                                | no
+ listen_backlog            | 128                                                                                                                            | 128                                                                                                                            | no
+ listen_port               | 6432                                                                                                                           | 6432                                                                                                                           | no
+ log_connections           | 0                                                                                                                              | 1                                                                                                                              | yes
+ log_disconnections        | 0                                                                                                                              | 1                                                                                                                              | yes
+ log_pooler_errors         | 1                                                                                                                              | 1                                                                                                                              | yes
+ log_stats                 | 1                                                                                                                              | 1                                                                                                                              | yes
+ logfile                   |                                                                                                                                |                                                                                                                                | yes
+ max_client_conn           | 200                                                                                                                            | 100                                                                                                                            | yes
+ max_db_connections        | 0                                                                                                                              | 0                                                                                                                              | yes
+ max_packet_size           | 2147483647                                                                                                                     | 2147483647                                                                                                                     | yes
+ max_user_connections      | 0                                                                                                                              | 0                                                                                                                              | yes
+ min_pool_size             | 0                                                                                                                              | 0                                                                                                                              | yes
+ pidfile                   |                                                                                                                                |                                                                                                                                | no
+ pkt_buf                   | 4096                                                                                                                           | 4096                                                                                                                           | no
+ pool_mode                 | transaction                                                                                                                    | session                                                                                                                        | yes
+ query_timeout             | 0                                                                                                                              | 0                                                                                                                              | yes
+ query_wait_timeout        | 30                                                                                                                             | 120                                                                                                                            | yes
+ reserve_pool_size         | 0                                                                                                                              | 0                                                                                                                              | yes
+ reserve_pool_timeout      | 5                                                                                                                              | 5                                                                                                                              | yes
+ resolv_conf               |                                                                                                                                |                                                                                                                                | no
+ sbuf_loopcnt              | 5                                                                                                                              | 5                                                                                                                              | yes
+ server_check_delay        | 30                                                                                                                             | 30                                                                                                                             | yes
+ server_check_query        | select 1                                                                                                                       | select 1                                                                                                                       | yes
+ server_connect_timeout    | 10                                                                                                                             | 15                                                                                                                             | yes
+ server_fast_close         | 0                                                                                                                              | 0                                                                                                                              | yes
+ server_idle_timeout       | 600                                                                                                                            | 600                                                                                                                            | yes
+ server_lifetime           | 3600                                                                                                                           | 3600                                                                                                                           | yes
+ server_login_retry        | 15                                                                                                                             | 15                                                                                                                             | yes
+ server_reset_query        | DISCARD ALL                                                                                                                    | DISCARD ALL                                                                                                                    | yes
+ server_reset_query_always | 0                                                                                                                              | 0                                                                                                                              | yes
+ server_round_robin        | 0                                                                                                                              | 0                                                                                                                              | yes
+ server_tls_ca_file        |                                                                                                                                |                                                                                                                                | yes
+ server_tls_cert_file      |                                                                                                                                |                                                                                                                                | yes
+ server_tls_ciphers        | fast                                                                                                                           | fast                                                                                                                           | yes
+ server_tls_key_file       |                                                                                                                                |                                                                                                                                | yes
+ server_tls_protocols      | secure                                                                                                                         | secure                                                                                                                         | yes
+ server_tls_sslmode        | disable                                                                                                                        | disable                                                                                                                        | yes
+ so_reuseport              | 0                                                                                                                              | 0                                                                                                                              | no
+ stats_period              | 5                                                                                                                              | 60                                                                                                                             | yes
+ stats_users               |                                                                                                                                |                                                                                                                                | yes
+ suspend_timeout           | 10                                                                                                                             | 10                                                                                                                             | yes
+ syslog                    | 0                                                                                                                              | 0                                                                                                                              | yes
+ syslog_facility           | daemon                                                                                                                         | daemon                                                                                                                         | yes
+ syslog_ident              | pgbouncer                                                                                                                      | pgbouncer                                                                                                                      | yes
+ tcp_defer_accept          | 1                                                                                                                              | 1                                                                                                                              | yes
+ tcp_keepalive             | 1                                                                                                                              | 1                                                                                                                              | yes
+ tcp_keepcnt               | 0                                                                                                                              | 0                                                                                                                              | yes
+ tcp_keepidle              | 0                                                                                                                              | 0                                                                                                                              | yes
+ tcp_keepintvl             | 0                                                                                                                              | 0                                                                                                                              | yes
+ tcp_socket_buffer         | 0                                                                                                                              | 0                                                                                                                              | yes
+ tcp_user_timeout          | 0                                                                                                                              | 0                                                                                                                              | yes
+ unix_socket_dir           | /tmp                                                                                                                           | /tmp                                                                                                                           | no
+ unix_socket_group         |                                                                                                                                |                                                                                                                                | no
+ unix_socket_mode          | 511                                                                                                                            | 0777                                                                                                                           | no
+ user                      |                                                                                                                                |                                                                                                                                | no
+ verbose                   | 0                                                                                                                              |                                                                                                                                | yes
+(84 rows)
+
+
+bash-3.2$ 

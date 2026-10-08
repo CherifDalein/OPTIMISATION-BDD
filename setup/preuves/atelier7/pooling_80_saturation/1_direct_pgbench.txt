@@ -1,0 +1,4 @@
+pgbench (17.11 (Debian 17.11-1.pgdg12+2))
+
+pgbench: error: connection to server at "db" (172.21.0.2), port 5432 failed: FATAL:  remaining connection slots are reserved for roles with the SUPERUSER attribute
+pgbench: error: could not create connection for client 68

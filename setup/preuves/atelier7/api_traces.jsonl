@@ -1,0 +1,7 @@
+{"trace":"dd85795e-532d-4ed2-ad98-870186cf1632","route":"/observations","status":200,"sqlCount":0,"sqlMs":0,"durationMs":3.891,"poolWaiting":0}
+{"trace":"64e6d66f-a8e3-46eb-9148-307a9760b1e0","route":"/observations","status":200,"sqlCount":0,"sqlMs":0,"durationMs":1.954,"poolWaiting":0}
+{"trace":"898dcaab-ee60-44eb-bc2c-b0c78620b621","route":"/commandes?limit=20&pagination=curseur&relations=n1","status":200,"sqlCount":21,"sqlMs":76.884,"durationMs":81.344,"poolWaiting":0}
+{"trace":"74ca8b34-459b-4054-bbc9-e173db5007ed","route":"/commandes?limit=20&pagination=curseur&relations=groupe","status":200,"sqlCount":2,"sqlMs":60.852,"durationMs":67.322,"poolWaiting":0}
+{"trace":"04e5f5e3-cca0-422a-807c-a0dbde5666c6","route":"/commandes?limit=20&relations=groupe","status":200,"sqlCount":2,"sqlMs":25.445,"durationMs":29.856,"poolWaiting":0}
+{"trace":"0af7d1e3-16e6-44f9-94f5-0073a9055097","route":"/commandes?limit=20&cursor=eyJ2IjoxLCJjbGllbnRJZCI6IjQyIiwiZGF0ZSI6IjIwMjYtMDktMTJUMDg6MDQ6MDIuMDAwMDAwWiIsImlkIjoiMjkwNDIifQ.-8akB0gWWnMKadehIh_owEhG5gkmQREIWKs9j8hbO0M&relations=groupe","status":200,"sqlCount":2,"sqlMs":42.684,"durationMs":46.102,"poolWaiting":0}
+{"trace":"741c4d70-0716-47ab-8e2c-7e045323433a","route":"/commandes?limit=20&pagination=offset&offset=20&relations=groupe","status":200,"sqlCount":2,"sqlMs":25.77,"durationMs":28.667,"poolWaiting":0}
